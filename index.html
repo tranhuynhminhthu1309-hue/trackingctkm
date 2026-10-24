@@ -234,12 +234,12 @@ function frozenTop(o){var a=topCodes(o,"k5").concat(topCodes(o,"k1"));if(a.lengt
   return Object.keys(CTG).some(function(c){return /FROZEN/.test(N(CTG[c]))&&/ON TOP/.test(N(CTG[c]))})?[]:Object.keys(o.codes).filter(function(c){return /FROZEN 78ML.*MUA TU (500K|1TR)/.test(N(cname(o,c)))})}
 function progCodes(o,key){var th=key==="k5"||key==="k1";return Object.keys(o.codes).filter(function(c){return topCodes(o,key).indexOf(c)>=0||(th&&/FROZEN 78ML.*MUA TU (500K|1TR)/.test(N(cname(o,c))))}).map(function(c){return[c,cname(o,c)]})}
 function openDetail(r){var cl=r.loai==="CTTL",sub;DETPRE="";
-  if(cl){DETH=["Mã KH","Tên KH","Mã NPP","Tên NPP","Mức","Doanh số thực đạt","% CK","Tiền chiết khấu"];
+  if(cl){DETH=["Mã KH","Tên KH","Mã NPP","Tên NPP","Mức","Doanh số thực đạt","% CK","Tiền chiết khấu","Còn thiếu để đạt CK"];
     var inS=function(x){return x.vk===r.vk&&x.p===r.key&&(!r.mp||x.mp===r.mp)},LA={"1":"A","2":"B"},lv=function(m){return LA[m]||m||"?"};
     var rg=L54.filter(function(x){return inS(x)&&x.st!=="rej"}),ap=L58.filter(inS),cn=function(a,m){return uniq(a.filter(function(x){return !m||x.m===m}).map(function(x){return x.k})).length};
     var ms=uniq(rg.map(function(x){return x.m}).concat(ap.map(function(x){return x.m}))).sort();
     DETPRE='<table style="min-width:0;margin-bottom:12px"><thead><tr><th>Loại CT</th><th>Mức</th><th>Số suất đăng ký (5.4)</th><th>Số suất đã duyệt (5.8)</th></tr></thead><tbody>'+ms.map(function(m){return '<tr><td>'+E(r.prog)+'</td><td>'+E(lv(m))+'</td><td>'+cn(rg,m)+'</td><td>'+cn(ap,m)+'</td></tr>'}).join("")+'<tr class="gh"><td colspan="2">Tổng '+E(r.prog)+'</td><td>'+cn(rg)+'</td><td>'+cn(ap)+'</td></tr></tbody></table>';
-    var tck=0;DETA=ap.map(function(x){var rt=ckRate(r.key,x.m,x.ds),a=Math.round(x.ds*rt);tck+=a;return[x.k,x.kn,x.mp,x.np,lv(x.m),Math.round(x.ds),rt?Math.round(rt*100)+"%":"—",a]});
+    var tck=0;DETA=ap.map(function(x){var rt=ckRate(r.key,x.m,x.ds),a=Math.round(x.ds*rt);tck+=a;return[x.k,x.kn,x.mp,x.np,lv(x.m),Math.round(x.ds),rt?Math.round(rt*100)+"%":"—",a,rt?"Đã đạt":Math.max(0,(x.m==="1"?15e6:x.m==="2"?4e6:0)-Math.round(x.ds))]});
     sub="Định biên "+fmt(r.db)+" suất (tính chung cả chương trình, không chia mức A/B). Đăng ký "+cn(rg)+", đã duyệt "+cn(ap)+" (mức 1 = A, mức 2 = B). Tổng tiền chiết khấu: "+fmt(tck)+"đ ("+(r.key==="si"?"mức A 5% từ 15 triệu/tháng, mức B 3% từ 4 triệu/tháng":"tích lũy 3 tháng 10-11-12: từ 12 triệu 3%, từ 25 triệu 4%, từ 50 triệu 5%")+"). Danh sách bên dưới là các khách hàng đã duyệt."}
   else if(r.key==="k5"||r.key==="k1"){DETH=["Mã đơn","Ngày","Mã NPP","NPP","Điều kiện","Giá trị","Chiết khấu","Mã CTKM","Tên CTKM"];
     var thr=r.key==="k5"?5e5:1e6,ok=0,nc=0;
@@ -253,14 +253,14 @@ function openDetail(r){var cl=r.loai==="CTTL",sub;DETPRE="";
       return[o.id,o.ng,o.mp,o.np,VF(o),ckSum(o,pc),pc.join("; "),pc.map(function(c){return cname(o,c)||"(chưa có tên)"}).join("; ")]});
     sub=DETA.length+" đơn hàng có mã CTKM on top."+(Object.keys(CTG).length?"":" Tải file CTKM để nhận diện mã on top.")}
   if(cl&&r.key==="sua"){var cm=curMonth(),Q=[0,1,2].map(function(i){return cm.slice(0,4)+"-"+(10+i)}),inQ=Q.indexOf(cm)>=0,byM={};
-    var inS2=function(x){return x.vk===r.vk&&(!r.mp||x.mp===r.mp)};
+    var inS2=function(x){return x.p==="sua"&&x.vk===r.vk&&(!r.mp||x.mp===r.mp)};
     if(inQ)Q.forEach(function(m){if(m===cm)byM[m]=L58.filter(inS2);else if(SQ[m])byM[m]=SQ[m].filter(inS2)});else byM[cm]=L58.filter(inS2);
     var M=inQ?Q.filter(function(m){return byM[m]}):[cm],full=inQ&&M.length===3,C={},tot=0,got=0;
     M.forEach(function(m){byM[m].forEach(function(x){var c=C[x.k]||(C[x.k]={k:x.k,kn:x.kn,mp:x.mp,np:x.np,d:{}});c.d[m]=(c.d[m]||0)+x.ds})});
-    DETH=["Mã KH","Tên KH","Mã NPP","Tên NPP"].concat(M.map(function(m){return "Doanh số T"+m.slice(5)})).concat(full?["Tích lũy 10-11-12","% CK","Tiền chiết khấu"]:["% CK","Tiền chiết khấu"]);
+    DETH=["Mã KH","Tên KH","Mã NPP","Tên NPP"].concat(M.map(function(m){return "Doanh số T"+m.slice(5)})).concat(full?["Tích lũy 10-11-12","% CK","Tiền chiết khấu"]:["% CK tạm tính","Tiền chiết khấu"]);
     DETA=Object.keys(C).map(function(k){var c=C[k],ds=M.map(function(m){return Math.round(c.d[m]||0)}),cum=ds.reduce(function(a,b){return a+b},0),row=[c.k,c.kn,c.mp,c.np].concat(ds);
       if(full){var rt=ckRate("sua","",cum),a=Math.round(cum*rt);tot+=a;if(rt)got++;return row.concat([cum,rt?Math.round(rt*100)+"%":"—",a])}
-      return row.concat(["—","Chưa tính"])});
+      var pr=ckRate("sua","",cum);return row.concat([pr?Math.round(pr*100)+"%":"—","Chưa tính"])});
     sub="Định biên "+fmt(r.db)+" suất. Chiết khấu Shop sữa tính theo doanh số tích lũy 3 tháng 10-11-12: từ 12 triệu 3%, từ 25 triệu 4%, từ 50 triệu 5%. "+(full?"Đã đủ 3 tháng: "+got+" khách hàng đạt mức chiết khấu, tổng tiền chiết khấu "+fmt(tot)+"đ.":(inQ?"Hiện mới có dữ liệu tháng "+M.map(function(m){return m.slice(5)}).join(", ")+" nên đang hiển thị doanh số theo tháng, tiền chiết khấu sẽ được tính khi đủ 3 tháng (10, 11, 12).":"Tháng này nằm ngoài kỳ 10-11-12 nên chỉ hiển thị doanh số theo tháng."))+" Đăng ký "+cn(rg)+", đã duyệt "+cn(ap)+" trong tháng "+cm.slice(5)+"."}
   $("#dt").textContent=r.vung+(r.mp?" · "+r.mp+" "+r.npn:"")+" · "+r.prog;
   $("#dsum").textContent=sub+(DETA.length>400?" Chỉ hiện 400 dòng đầu, dùng Xuất Excel để xem đủ.":"");
