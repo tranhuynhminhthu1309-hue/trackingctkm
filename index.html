@@ -155,7 +155,7 @@ function build(db,p51,L,ct,L4){
     if(hasCT)Object.keys(o.codes).forEach(function(c){if(!ct[c])um[c]=(um[c]||0)+1});
     if(!db[o.vk])unk[o.v]=1});
   L.forEach(function(r){nn[r.mp]=nn[r.mp]||r.np;if(!db[r.vk])unk[r.v]=1;
-    [[C,r.vk+"|"+r.p],[CN,r.vk+"|"+r.mp+"|"+r.p]].forEach(function(z){var x=z[0][z[1]]||(z[0][z[1]]={kh:{},ds:0,c:0});x.kh[r.k]=1;x.ds+=r.ds;if(r.p==="si")x.c+=Math.round(r.ds*ckRate("si",r.m,r.ds))})});
+    [[C,r.vk+"|"+r.p],[CN,r.vk+"|"+r.mp+"|"+r.p]].forEach(function(z){var x=z[0][z[1]]||(z[0][z[1]]={kh:{},ds:0,c:0});x.kh[r.k]=1;x.ds+=r.ds;if(r.p==="si")x.c+=ckAmt("si",r.m,r.ds)})});
   var RG={},RGN={};L54.forEach(function(r){if(r.st==="rej")return;[[RG,r.vk+"|"+r.p],[RGN,r.vk+"|"+r.mp+"|"+r.p]].forEach(function(z){(z[0][z[1]]=z[0][z[1]]||{})[r.k]=1});nn[r.mp]=nn[r.mp]||r.np;if(!db[r.vk])unk[r.v]=1});
   ROWS=[];Object.keys(db).forEach(function(v){["k5","k1","stc","oa","si","sua"].forEach(function(p){
     var b=db[v][p],cl=p==="si"||p==="sua",x=cl?C[v+"|"+p]:A[v+"|"+p],a=x?(cl?Object.keys(x.kh).length:x.n):0;
@@ -228,6 +228,7 @@ function loadQuarter(){var cm=curMonth(),y=cm.slice(0,4);SQ={};
 function ckRate(p,m,ds){ // Shop sỉ: mức A (1) 5% từ 10 triệu, mức B (2) 3% từ 4 triệu, theo doanh số tích lũy tháng · Shop sữa: tích lũy 3 tháng 10-11-12, từ 12tr 3%, 25tr 4%, 50tr 5%
   if(p==="si")return m==="1"?(ds>=10e6?.05:0):m==="2"?(ds>=4e6?.03:0):0;
   return ds>=50e6?.05:ds>=25e6?.04:ds>=12e6?.03:0}
+function ckAmt(p,m,ds){var a=Math.round(ds*ckRate(p,m,ds));if(p==="si")a=Math.min(a,m==="1"?1500000:m==="2"?750000:a);return a} // Shop sỉ: thưởng tối đa mức A 1,5 triệu, mức B 750.000đ
 function suaTotals(){var cm=curMonth(),Q=[0,1,2].map(function(i){return cm.slice(0,4)+"-"+(10+i)}),by={},C={},v={},n={};
   if(Q.indexOf(cm)<0)return{full:false};
   Q.forEach(function(m){if(m===cm)by[m]=L58.filter(function(x){return x.p==="sua"});else if(SQ[m])by[m]=SQ[m]});
@@ -248,8 +249,8 @@ function openDetail(r){var cl=r.loai==="CTTL",sub;DETPRE="";
     var rg=L54.filter(function(x){return inS(x)&&x.st!=="rej"}),ap=L58.filter(inS),cn=function(a,m){return uniq(a.filter(function(x){return !m||x.m===m}).map(function(x){return x.k})).length};
     var ms=uniq(rg.map(function(x){return x.m}).concat(ap.map(function(x){return x.m}))).sort();
     DETPRE='<table style="min-width:0;margin-bottom:12px"><thead><tr><th>Loại CT</th><th>Mức</th><th>Số suất đăng ký (5.4)</th><th>Số suất đã duyệt (5.8)</th></tr></thead><tbody>'+ms.map(function(m){return '<tr><td>'+E(r.prog)+'</td><td>'+E(lv(m))+'</td><td>'+cn(rg,m)+'</td><td>'+cn(ap,m)+'</td></tr>'}).join("")+'<tr class="gh"><td colspan="2">Tổng '+E(r.prog)+'</td><td>'+cn(rg)+'</td><td>'+cn(ap)+'</td></tr></tbody></table>';
-    var tck=0;DETA=ap.map(function(x){var rt=ckRate(r.key,x.m,x.ds),a=Math.round(x.ds*rt);tck+=a;return[x.k,x.kn,x.mp,x.np,lv(x.m),Math.round(x.ds),rt?Math.round(rt*100)+"%":"—",a,rt?"Đã đạt":Math.max(0,(x.m==="1"?10e6:x.m==="2"?4e6:0)-Math.round(x.ds))]});
-    sub="Định biên "+fmt(r.db)+" suất (tính chung cả chương trình, không chia mức A/B). Đăng ký "+cn(rg)+", đã duyệt "+cn(ap)+" (mức 1 = A, mức 2 = B). Tổng tiền chiết khấu: "+fmt(tck)+"đ ("+(r.key==="si"?"mức A 5% từ 10 triệu/tháng, mức B 3% từ 4 triệu/tháng":"tích lũy 3 tháng 10-11-12: từ 12 triệu 3%, từ 25 triệu 4%, từ 50 triệu 5%")+"). Danh sách bên dưới là các khách hàng đã duyệt."}
+    var tck=0;DETA=ap.map(function(x){var rt=ckRate(r.key,x.m,x.ds),a=ckAmt(r.key,x.m,x.ds);tck+=a;return[x.k,x.kn,x.mp,x.np,lv(x.m),Math.round(x.ds),rt?Math.round(rt*100)+"%":"—",a,rt?"Đã đạt":Math.max(0,(x.m==="1"?10e6:x.m==="2"?4e6:0)-Math.round(x.ds))]});
+    sub="Định biên "+fmt(r.db)+" suất (tính chung cả chương trình, không chia mức A/B). Đăng ký "+cn(rg)+", đã duyệt "+cn(ap)+" (mức 1 = A, mức 2 = B). Tổng tiền chiết khấu: "+fmt(tck)+"đ ("+(r.key==="si"?"mức A 5% từ 10 triệu/tháng, tối đa 1.500.000đ; mức B 3% từ 4 triệu/tháng, tối đa 750.000đ":"tích lũy 3 tháng 10-11-12: từ 12 triệu 3%, từ 25 triệu 4%, từ 50 triệu 5%")+"). Danh sách bên dưới là các khách hàng đã duyệt."}
   else if(r.key==="k5"||r.key==="k1"){DETH=["Mã đơn","Ngày","Mã NPP","NPP","Điều kiện","Giá trị","Chiết khấu","Mã CTKM","Tên CTKM"];
     var thr=r.key==="k5"?5e5:1e6,ok=0,nc=0;
     DETA=ORD.map(function(o){if(o.vk!==r.vk||(r.mp&&o.mp!==r.mp))return null;var g=o.k>=thr,t=progCodes(o,r.key).length>0;return t?{o:o,g:g}:null}).filter(Boolean)
