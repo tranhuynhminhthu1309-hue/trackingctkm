@@ -149,10 +149,11 @@ $("#go").onclick=function(){
   }).catch(function(e){$("#warns").innerHTML='<div class="warn err">Không đọc được file: '+e.message+'</div>';$("#msg").textContent="";$("#go").disabled=false})};
 
 function build(db,p51,L,ct,L4){
-  CT=ct;L58=L;DBM=db;SPLIT=Object.keys(db).some(function(v){return db[v].opao!=null||db[v].adca!=null});L54=L4||[];var nn={},A={},B={},C={},CN={},unk={},um={},hasCT=Object.keys(ct).length>0;
+  CT=ct;L58=L;DBM=db;SPLIT=true;Object.keys(db).forEach(function(v){var d=db[v];if(d.opao==null&&d.adca==null&&d.oa!=null){d.opao=d.oa;d.adca=d.oa}}); /*dữ liệu cũ chỉ có 1 định biên Opao + ADCA: dùng chung cho cả hai*/L54=L4||[];var nn={},A={},B={},C={},CN={},unk={},um={},hasCT=Object.keys(ct).length>0;
   function add(M,k,d,c){var x=M[k]||(M[k]={n:0,d:0,c:0});x.n++;x.d+=d;x.c+=c||0}
   var ckv=function(o,cs){return cs.reduce(function(t,c){return t+((o.ck&&o.ck[c])||0)},0)};
-  ORD=Object.keys(p51.O).map(function(id){var o=p51.O[id];o.id=id;o.vk=V(o.v);var d=db[o.vk];o.k5=!!((d&&d.k5!=null)||S500[o.vk]);nn[o.mp]=o.np;return o});
+  ORD=Object.keys(p51.O).map(function(id){var o=p51.O[id];o.id=id;o.vk=V(o.v);
+    if(o.leg){var hs=Object.keys(o.codes).map(function(c){return N((CTG[c]||"")+" "+cname(o,c))}),ha=hs.some(function(t){return t.indexOf("ADCA")>=0}),ho=hs.some(function(t){return t.indexOf("OPAO")>=0});o.op=ha&&!ho?0:o.oa;o.ad=ho&&!ha?0:o.oa;o.leg=0} /*đơn lưu theo bản cũ chưa tách Opao / ADCA: tạm phân loại theo tên CTKM, tải lại file 5.1 và Lưu để có số chính xác*/var d=db[o.vk];o.k5=!!((d&&d.k5!=null)||S500[o.vk]);nn[o.mp]=o.np;return o});
   ORD.forEach(function(o){
     (SPLIT?["stc","opao","adca"]:["stc","oa"]).forEach(function(p){var tc=topCodes(o,p);if(tc.length){var d={stc:o.stcd,oa:o.oa,opao:o.op,adca:o.ad}[p],cv=ckv(o,tc);add(A,o.vk+"|"+p,d,cv);add(B,o.vk+"|"+o.mp+"|"+p,d,cv)}}); // STC, Opao + ADCA: đếm đơn có mã CTKM on top
     var fk=o.k5?"k5":"k1";if(o.k>=(o.k5?5e5:1e6)&&progCodes(o,fk).length){var cf=ckv(o,progCodes(o,fk).map(function(y){return y[0]}));add(A,o.vk+"|"+fk,o.k,cf);add(B,o.vk+"|"+o.mp+"|"+fk,o.k,cf)} // Frozen 78ml: đơn từ 500K / 1 triệu Frozen 78ml
@@ -161,7 +162,7 @@ function build(db,p51,L,ct,L4){
   L.forEach(function(r){nn[r.mp]=nn[r.mp]||r.np;if(!db[r.vk])unk[r.v]=1;
     [[C,r.vk+"|"+r.p],[CN,r.vk+"|"+r.mp+"|"+r.p]].forEach(function(z){var x=z[0][z[1]]||(z[0][z[1]]={kh:{},ds:0,c:0});x.kh[r.k]=1;x.ds+=r.ds;if(r.p==="si")x.c+=ckAmt("si",r.m,r.ds)})});
   var RG={},RGN={};L54.forEach(function(r){if(r.st==="rej")return;[[RG,r.vk+"|"+r.p],[RGN,r.vk+"|"+r.mp+"|"+r.p]].forEach(function(z){(z[0][z[1]]=z[0][z[1]]||{})[r.k]=1});nn[r.mp]=nn[r.mp]||r.np;if(!db[r.vk])unk[r.v]=1});
-  ROWS=[];Object.keys(db).forEach(function(v){["k5","k1","stc","oa","opao","adca","si","sua"].forEach(function(p){
+  ROWS=[];Object.keys(db).forEach(function(v){["k5","k1","stc","opao","adca","si","sua"].forEach(function(p){
     var b=db[v][p],cl=p==="si"||p==="sua",x=cl?C[v+"|"+p]:A[v+"|"+p],a=x?(cl?Object.keys(x.kh).length:x.n):0;
     var dk=cl&&RG[v+"|"+p]?Object.keys(RG[v+"|"+p]).length:0;if(b==null&&!a&&!dk)return;ROWS.push({dk:dk,mien:db[v].mien,vung:db[v].vung,vk:v,prog:NAMES[p],loai:cl?"CTTL":"CTKM",key:p,db:b||0,tt:a,ds:x?(cl?x.ds:x.d):0,ck:cl?(p==="si"?(x?x.c:0):undefined):(x?x.c:0)})})});
   NR=[];[[B,0],[CN,1]].forEach(function(z){Object.keys(z[0]).forEach(function(k){var s=k.split("|"),x=z[0][k],d=db[s[0]],cl=z[1];
@@ -329,7 +330,7 @@ function loadServer(t){
     if(!j.thang||!j.dinhbien.length){$("#out").hidden=true;$("#warns").innerHTML='<div class="warn">Chưa có dữ liệu cho tháng này. Tải 3 file rồi bấm Kiểm tra file và Lưu.</div>';return}
     $("#upc").open=false;var nz=function(x){return x===""||x==null?null:Number(x)},db={},O={},ct={};
     j.dinhbien.forEach(function(r){var _d=db[V(r[1])]={mien:r[0],vung:r[1],k5:nz(r[2]),k1:nz(r[3]),stc:nz(r[4]),si:nz(r[6]),sua:nz(r[7])};var q=String(r[5]);if(q.indexOf("|")>=0){var qq=q.split("|");_d.opao=nz(qq[0]);_d.adca=nz(qq[1])}else _d.oa=nz(q)});
-    j.donhang.forEach(function(r){var o={id:String(r[0]),ng:r[1],mp:String(r[2]),np:r[3],v:r[4],stc:+r[5]||0,stcd:+r[6]||0,k:+r[7]||0,oa:+r[8]||0,op:0,ad:0,codes:{},nm:{},ck:{}};var q8=String(r[8]);if(q8.indexOf("|")>=0){var a8=q8.split("|");o.op=+a8[0]||0;o.ad=+a8[1]||0;o.oa=o.op+o.ad}String(r[10]||"").split("||").forEach(function(x){var i=x.indexOf("::");if(i>0){var k=x.slice(0,i);if(k.indexOf("CK:")===0)o.ck[k.slice(3)]=+x.slice(i+2)||0;else o.nm[k]=x.slice(i+2)}});String(r[9]).split(",").forEach(function(c){c=c.trim();if(c)o.codes[c]=1});O[o.id]=o});
+    j.donhang.forEach(function(r){var o={id:String(r[0]),ng:r[1],mp:String(r[2]),np:r[3],v:r[4],stc:+r[5]||0,stcd:+r[6]||0,k:+r[7]||0,oa:+r[8]||0,op:0,ad:0,codes:{},nm:{},ck:{}};var q8=String(r[8]);if(q8.indexOf("|")>=0){var a8=q8.split("|");o.op=+a8[0]||0;o.ad=+a8[1]||0;o.oa=o.op+o.ad}else o.leg=1;String(r[10]||"").split("||").forEach(function(x){var i=x.indexOf("::");if(i>0){var k=x.slice(0,i);if(k.indexOf("CK:")===0)o.ck[k.slice(3)]=+x.slice(i+2)||0;else o.nm[k]=x.slice(i+2)}});String(r[9]).split(",").forEach(function(c){c=c.trim();if(c)o.codes[c]=1});O[o.id]=o});
     CTG={};j.ctkm.forEach(function(r){ct[r[0]]=r[1];CTG[r[0]]=r[2]||""});DBM=db;
     build(db,{O:O,skip:0},j.cttl.map(function(r){return{vk:V(r[0]),v:r[0],p:r[1],k:String(r[2]),kn:r[3],mp:String(r[4]),np:r[5],lv:String(r[6]).indexOf("|")>0?String(r[6]).split("|").slice(1).join("|"):r[6],m:String(r[6]).indexOf("|")>0?String(r[6]).split("|")[0]:"",ds:+r[7]||0}}),ct,(j.dangky||[]).map(function(r){return{vk:V(r[0]),v:r[0],p:r[1],k:String(r[2]),kn:r[3],mp:String(r[4]),np:r[5],m:String(r[6]),st:r[7]}}));
     loadQuarter()
