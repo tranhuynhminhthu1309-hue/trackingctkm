@@ -137,14 +137,16 @@ function parse54(rows,errs){var i=findHdr(rows,["MA KHACH HANG","TRANG THAI","TE
     var s=N(r[c.s]),st=/KHONG|TU CHOI/.test(s)?"rej":(s.indexOf("DUYET")>=0&&s.indexOf("CHO")<0?"appr":"reg"),m=String(r[c.lc]).trim(),key=V(r[c.v])+"|"+p+"|"+k+"|"+m;
     if(seen[key])return;seen[key]=1;L.push({vk:V(r[c.v]),v:r[c.v],p:p,k:k,kn:r[c.kn],mp:String(r[c.mp]),np:r[c.np],m:m,st:st})});
   return L}
+function mergeCT(m,oC,oG){if(!m)return m;Object.keys(oC||{}).forEach(function(k){if(!(k in m)){m[k]=oC[k];CTG[k]=(oG&&oG[k])||""}});return m} /* file CTKM mới chỉ có mã của tháng này: gộp thêm mã các tháng trước để không làm mất số đơn tháng cũ */
 function parseCT(rows,errs){var i=findHdr(rows,["MA KHUYEN MAI","TEN CTKM"]);if(i<0){errs.push("File CTKM: không tìm thấy cột Mã Khuyến Mãi hoặc Tên CTKM.");return null}
   var h=rows[i].map(N),a=ci(h,"MA KHUYEN MAI"),b=ci(h,"TEN CTKM"),g=ci(h,"NHOM CTKM"),m={};CTG={};
   rows.slice(i+1).forEach(function(r){var k=String(r[a]).trim();if(k){m[k]=String(r[b]).replace(/\s+/g," ").trim();CTG[k]=g>=0?String(r[g]).trim():""}});return m}
 
 $("#go").onclick=function(){
+  var oC=CT,oG=CTG; /* danh mục CTKM đang lưu (gồm các tháng trước): giữ lại để gộp với file CTKM mới */
   $("#msg").textContent="Đang đọc file...";$("#go").disabled=true;$("#save").disabled=true;$("#warns").innerHTML="";
   Promise.all([readFile(F.db),readFile(F["51"]),readFile(F["58"]),F.ct?readFile(F.ct):Promise.resolve(null),F["54"]?readFile(F["54"]):Promise.resolve(null)]).then(function(a){
-    var w0="",errs=[],db=parseDB(a[0],errs),p51=parse51(a[1],errs),p58=parse58(a[2],errs),ct=a[3]?parseCT(a[3],errs):{},p54=a[4]?parse54(a[4],errs):[];
+    var w0="",errs=[],db=parseDB(a[0],errs),p51=parse51(a[1],errs),p58=parse58(a[2],errs),ct=a[3]?mergeCT(parseCT(a[3],errs),oC,oG):{},p54=a[4]?parse54(a[4],errs):[];
     if(errs.length){$("#warns").innerHTML=errs.map(function(e){return '<div class="warn err">'+e+' Dữ liệu chưa được cập nhật.</div>'}).join("");$("#msg").textContent="";$("#go").disabled=false;return}
     var tm=$("#thang").value;if(p51.thang){if(tm&&tm!==p51.thang)w0="Ô tháng đang chọn là "+tm+" nhưng file 5.1 là dữ liệu tháng "+p51.thang+", web đã đổi sang tháng "+p51.thang+". ";$("#thang").value=p51.thang}build(db,p51,p58,ct,p54);STAGE=1;loadQuarter();$("#save").disabled=false;$("#msg").textContent=w0+"Đã kiểm tra, đang xem trước. Bấm Lưu lên Google Sheet để lưu cho tháng "+($("#thang").value||"(chọn tháng)")+".";$("#go").disabled=false
   }).catch(function(e){$("#warns").innerHTML='<div class="warn err">Không đọc được file: '+e.message+'</div>';$("#msg").textContent="";$("#go").disabled=false})};
@@ -245,7 +247,7 @@ function suaTotals(){var cm=curMonth(),Q=[0,1,2].map(function(i){return cm.slice
 function applySua(){var T=suaTotals();[ROWS,NR].forEach(function(L,i){L.forEach(function(r){if(r.key!=="sua")return;r.ck=T.full?((i?T.n[r.vk+"|"+r.mp]:T.v[r.vk])||0):null})})}
 function ckSum(o,codes){var t=0;codes.forEach(function(c){t+=(o.ck&&o.ck[c])||0});return t?fmt(t)+"đ":"—"}
 function cname(o,c){return CT[c]||o.nm[c]||""}
-function topCodes(o,key){return Object.keys(o.codes).filter(function(c){var g=N(CTG[c]||"");if(!g||!SG[key](g))return false;
+function topCodes(o,key){return Object.keys(o.codes).filter(function(c){var g=N(CTG[c]||cname(o,c));if(!g||!SG[key](g))return false;
   if((key==="opao"||key==="adca")&&g.indexOf("OPAO")>=0&&g.indexOf("ADCA")>=0)return(key==="opao"?o.op:o.ad)>0; // mã on top chung Opao + ADCA: đơn thuộc Opao nếu có mua Opao, thuộc ADCA nếu có mua ADCA
   return true})}
 function frozenTop(o){var a=topCodes(o,"k5").concat(topCodes(o,"k1"));if(a.length)return a;
