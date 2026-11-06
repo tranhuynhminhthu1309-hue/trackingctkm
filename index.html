@@ -74,7 +74,9 @@ var V=function(s){return N(s).replace("TP HO CHI MINH","TP HCM")};
 var num=function(v){var n=Number(String(v).replace(/,/g,""));return isFinite(n)?n:0};
 var fmt=function(n){return Math.round(n).toLocaleString("vi-VN")};
 var API_URL="https://script.google.com/macros/s/AKfycbzJR94cy29BwoKXuFQtzzpBZmbP-dQZ4i36iemegPE7eeUUwBKovjs6NWv-YtqgNRud/exec";
-var S500={"DONG BAC":1,"DUYEN HAI":1,"HA NOI 1":1,"HA NOI 2":1,"TAY BAC":1,"MIEN TRUNG 1":1}; // vùng tính mức 500K, còn lại mức 1 triệu
+var S500={"DONG BAC":1,"DUYEN HAI":1,"HA NOI 1":1,"HA NOI 2":1,"TAY BAC":1,"MIEN TRUNG 1":1}; // chỉ áp dụng cho tháng trước T11: vùng tính mức 500K, còn lại 1 triệu. Từ T11 mọi vùng tính mức 1 triệu
+var OLDR=function(){var m=curMonth();return !!m&&m<"2026-11"};
+var is500=function(v){return OLDR()&&!!S500[v]};
 var F={},ROWS=[],STAGE=null,MODE="v",CHIP="",STF="";
 function readFile(f){return f.arrayBuffer().then(function(b){var wb=XLSX.read(b,{type:"array"});return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:""})})}
 function findHdr(rows,need){for(var i=0;i<Math.min(rows.length,25);i++){var h=rows[i].map(N);if(need.every(function(k){return h.some(function(c){return c.indexOf(k)>=0})}))return i}return -1}
@@ -89,8 +91,7 @@ function parseDB(rows,errs){
   rows.slice(i+1).forEach(function(r){if(!String(r[c.v]).trim()||N(r[c.m])==="GRAND TOTAL")return;
     var g=function(k){var x=r[c[k]];return x===""||x==null?null:num(x)};
     var k5=g("k5"),k1=g("k1");
-    if(k5==null&&k1==null&&c.k5<0&&c.k1<0){var f=g("k78");if(f!=null){if(S500[V(r[c.v])])k5=f;else k1=f}} // file chỉ có 1 cột "On top Frozen 78ml"
-    var d={mien:String(r[c.m]).trim(),vung:String(r[c.v]).trim(),k5:k5,k1:k1,stc:g("stc"),si:g("si"),sua:g("sua")};
+    var d={mien:String(r[c.m]).trim(),vung:String(r[c.v]).trim(),k5:k5,k1:k1,k78:(k5==null&&k1==null&&c.k5<0&&c.k1<0)?g("k78"):null,stc:g("stc"),si:g("si"),sua:g("sua")};
     if(c.ad>=0){d.opao=g("oa");d.adca=g("ad")}else d.oa=g("oa"); // file mới có cột On top ADCA riêng: tách Opao / ADCA; file cũ chỉ 1 cột: giữ Opao + ADCA gộp
     db[V(r[c.v])]=d});
   return db}
@@ -113,7 +114,7 @@ function parse51(rows,errs){
     if(c.ck>=0&&c.km>=0&&N(r[c.l]).indexOf("KHUYEN MAI")===0){var ck=num(r[c.ck]),kc=String(r[c.km]).trim();if(ck>0&&kc)o.ck[kc]=(o.ck[kc]||0)+ck;return} // dòng chiết khấu theo mã CTKM
     if(N(r[c.l])!=="HANG BAN")return;
     var g=N(r[c.g]),d=num(r[c.d]);
-    if(g==="SUA TRAI CAY"){o.stc+=c.le>=0?num(r[c.le])/32:num(r[c.t])*36/32;o.stcd+=d} // quy về thùng 32 hộp: 160 hộp = 5 thùng
+    if(g==="SUA TRAI CAY"){o.stc+=c.le>=0?num(r[c.le])/32:num(r[c.t])*36/32;o.stcd+=d} // quy về thùng 32 hộp: 320 hộp = 10 thùng
     else if(g==="KEM QUE"&&N(r[c.sp]).indexOf("78ML")>=0)o.k+=d;
     else if(g==="THUC UONG VI SUA OPAO"){o.oa+=d;o.op+=d}
     else if(g==="THUC UONG ADCA"){o.oa+=d;o.ad+=d}});
@@ -149,11 +150,11 @@ $("#go").onclick=function(){
   }).catch(function(e){$("#warns").innerHTML='<div class="warn err">Không đọc được file: '+e.message+'</div>';$("#msg").textContent="";$("#go").disabled=false})};
 
 function build(db,p51,L,ct,L4){
-  CT=ct;L58=L;DBM=db;SPLIT=true;Object.keys(db).forEach(function(v){var d=db[v];if(d.opao==null&&d.adca==null&&d.oa!=null){d.opao=d.oa;d.adca=d.oa}}); /*dữ liệu cũ chỉ có 1 định biên Opao + ADCA: dùng chung cho cả hai*/L54=L4||[];var nn={},A={},B={},C={},CN={},unk={},um={},hasCT=Object.keys(ct).length>0;
+  CT=ct;L58=L;DBM=db;Object.keys(db).forEach(function(v){var d=db[v];if(d.k78!=null&&d.k5==null&&d.k1==null){if(is500(v))d.k5=d.k78;else d.k1=d.k78}});SPLIT=true;Object.keys(db).forEach(function(v){var d=db[v];if(d.opao==null&&d.adca==null&&d.oa!=null){d.opao=d.oa;d.adca=d.oa}}); /*dữ liệu cũ chỉ có 1 định biên Opao + ADCA: dùng chung cho cả hai*/L54=L4||[];var nn={},A={},B={},C={},CN={},unk={},um={},hasCT=Object.keys(ct).length>0;
   function add(M,k,d,c){var x=M[k]||(M[k]={n:0,d:0,c:0});x.n++;x.d+=d;x.c+=c||0}
   var ckv=function(o,cs){return cs.reduce(function(t,c){return t+((o.ck&&o.ck[c])||0)},0)};
   ORD=Object.keys(p51.O).map(function(id){var o=p51.O[id];o.id=id;o.vk=V(o.v);
-    if(o.leg){var hs=Object.keys(o.codes).map(function(c){return N((CTG[c]||"")+" "+cname(o,c))}),ha=hs.some(function(t){return t.indexOf("ADCA")>=0}),ho=hs.some(function(t){return t.indexOf("OPAO")>=0});o.op=ha&&!ho?0:o.oa;o.ad=ho&&!ha?0:o.oa;o.leg=0} /*đơn lưu theo bản cũ chưa tách Opao / ADCA: tạm phân loại theo tên CTKM, tải lại file 5.1 và Lưu để có số chính xác*/var d=db[o.vk];o.k5=!!((d&&d.k5!=null)||S500[o.vk]);nn[o.mp]=o.np;return o});
+    if(o.leg){var hs=Object.keys(o.codes).map(function(c){return N((CTG[c]||"")+" "+cname(o,c))}),ha=hs.some(function(t){return t.indexOf("ADCA")>=0}),ho=hs.some(function(t){return t.indexOf("OPAO")>=0});o.op=ha&&!ho?0:o.oa;o.ad=ho&&!ha?0:o.oa;o.leg=0} /*đơn lưu theo bản cũ chưa tách Opao / ADCA: tạm phân loại theo tên CTKM, tải lại file 5.1 và Lưu để có số chính xác*/var d=db[o.vk];o.k5=!!((d&&d.k5!=null)||(d&&d.k1==null&&is500(o.vk)));nn[o.mp]=o.np;return o});
   ORD.forEach(function(o){
     (SPLIT?["stc","opao","adca"]:["stc","oa"]).forEach(function(p){var tc=topCodes(o,p);if(tc.length){var d={stc:o.stcd,oa:o.oa,opao:o.op,adca:o.ad}[p],cv=ckv(o,tc);add(A,o.vk+"|"+p,d,cv);add(B,o.vk+"|"+o.mp+"|"+p,d,cv)}}); // STC, Opao + ADCA: đếm đơn có mã CTKM on top
     var fk=o.k5?"k5":"k1";if(o.k>=(o.k5?5e5:1e6)&&progCodes(o,fk).length){var cf=ckv(o,progCodes(o,fk).map(function(y){return y[0]}));add(A,o.vk+"|"+fk,o.k,cf);add(B,o.vk+"|"+o.mp+"|"+fk,o.k,cf)} // Frozen 78ml: đơn từ 500K / 1 triệu Frozen 78ml
@@ -196,7 +197,7 @@ function base(src,noq){var m=$("#fm").value,v=$("#fv").value,q=noq?"":N($("#fq")
     if(q&&N([r.mien,r.vung,r.mp,r.npn,r.prog].join(" ")).indexOf(q)<0)return false;return true})}
 function fillP(){var C=SCREEN==="CTKM"?[["","Tất cả"],["k78","Frozen 78ml"],["stc","STC"]].concat(SPLIT?[["opao","Opao"],["adca","ADCA"]]:[["oa","Opao + ADCA"]]):[["","Tất cả"],["si","Shop sỉ"],["sua","Shop sữa"]];
   $("#chips").innerHTML=C.map(function(c){return '<button data-v="'+c[0]+'" class="'+(c[0]===CHIP?"on":"")+'">'+c[1]+'</button>'}).join("")}
-var GO=["k78","stc","oa","opao","adca","si","sua"],GL={opao:"On top Opao",adca:"On top ADCA",k78:"On top Frozen 78ml (500K / 1 triệu tùy vùng)",stc:"On top STC (mua đủ 5 thùng Sữa Trái Cây)",oa:"On top Opao + ADCA",si:"CTTL Shop sỉ",sua:"CTTL Shop sữa"};
+var GO=["k78","stc","oa","opao","adca","si","sua"],GL={opao:"On top Opao (mua đủ 10 thùng, giảm 8%)",adca:"On top ADCA (mua đủ 10 thùng, giảm 8%)",k78:"On top Frozen 78ml (đơn từ 1 triệu, giảm 8%)",stc:"On top STC (mua đủ 10 thùng Sữa Trái Cây, giảm 8%)",oa:"On top Opao + ADCA",si:"CTTL Shop sỉ",sua:"CTTL Shop sữa"};
 function gk(r){return r.key==="k5"||r.key==="k1"?"k78":r.key}
 function view(){var a=MODE==="n"?base(NR):base(ROWS);
   if(STF&&MODE==="v")a=a.filter(function(r){return st(r.db?r.tt/r.db:(r.tt?1:0))[0]===STF});
@@ -208,7 +209,7 @@ function kpi(t,rs,u){var s=sum(rs),pc=s.b?s.t/s.b:0,c=u==="cttl";
   '<div class="row"><span>Định biên</span><b>'+fmt(s.b)+' suất</b></div>'+(c?'<div class="row"><span>Đăng ký</span><b>'+fmt(s.k)+' suất</b></div>':'')+
   '<div class="row"><span>'+(c?'Đã duyệt':'Thực tế')+'</span><b>'+fmt(s.t)+(u==="đơn"?' đơn':' suất')+'</b></div><div class="row"><span>Doanh số</span><b>'+fmt(s.d)+' đ</b></div><div class="row"><span>Tiền chiết khấu</span><b>'+(s.u&&!s.c?"Chưa tính":fmt(s.c)+' đ')+'</b></div>'+
   (s.w?'<div class="row"><span>⚠ Vùng đăng ký &gt; định biên</span><b>'+s.w+'</b></div>':'')+(s.o?'<div class="row"><span>Vùng đã đạt / vượt định biên</span><b>'+s.o+'</b></div>':'')+'</div>'}
-function render(){applySua();var ckc=function(r){return r.ck==null?"Chưa tính":fmt(r.ck)},ckg=function(s){return s.u&&!s.c?"Chưa tính":fmt(s.c)};var nm=MODE==="n",ct=SCREEN==="CTTL",rs=CUR=view(),k=base(ROWS,1),sb=$("#sst").children;$("#tbl").className="";$("#sst").hidden=nm;
+function render(){applySua();var old=OLDR();GL.k78=old?"On top Frozen 78ml (500K / 1 triệu tùy vùng)":"On top Frozen 78ml (đơn từ 1 triệu, giảm 8%)";GL.stc=old?"On top STC (mua đủ 5 thùng Sữa Trái Cây)":"On top STC (mua đủ 10 thùng Sữa Trái Cây, giảm 8%)";GL.opao=old?"On top Opao":"On top Opao (mua đủ 10 thùng, giảm 8%)";GL.adca=old?"On top ADCA":"On top ADCA (mua đủ 10 thùng, giảm 8%)";var ckc=function(r){return r.ck==null?"Chưa tính":fmt(r.ck)},ckg=function(s){return s.u&&!s.c?"Chưa tính":fmt(s.c)};var nm=MODE==="n",ct=SCREEN==="CTTL",rs=CUR=view(),k=base(ROWS,1),sb=$("#sst").children;$("#tbl").className="";$("#sst").hidden=nm;
   sb[2].textContent=ct?"Sắp đạt định biên":"Sắp đầy";sb[3].textContent=ct?"Đạt / vượt định biên":"Vượt định biên";
   var P=function(f){return k.filter(f)};
   $("#kpis").innerHTML=ct?kpi("CTTL Shop sỉ",P(function(r){return r.key==="si"}),"cttl")+kpi("CTTL Shop sữa",P(function(r){return r.key==="sua"}),"cttl"):
