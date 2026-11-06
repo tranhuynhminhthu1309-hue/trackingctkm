@@ -144,9 +144,9 @@ function parseCT(rows,errs){var i=findHdr(rows,["MA KHUYEN MAI","TEN CTKM"]);if(
 $("#go").onclick=function(){
   $("#msg").textContent="Đang đọc file...";$("#go").disabled=true;$("#save").disabled=true;$("#warns").innerHTML="";
   Promise.all([readFile(F.db),readFile(F["51"]),readFile(F["58"]),F.ct?readFile(F.ct):Promise.resolve(null),F["54"]?readFile(F["54"]):Promise.resolve(null)]).then(function(a){
-    var errs=[],db=parseDB(a[0],errs),p51=parse51(a[1],errs),p58=parse58(a[2],errs),ct=a[3]?parseCT(a[3],errs):{},p54=a[4]?parse54(a[4],errs):[];
+    var w0="",errs=[],db=parseDB(a[0],errs),p51=parse51(a[1],errs),p58=parse58(a[2],errs),ct=a[3]?parseCT(a[3],errs):{},p54=a[4]?parse54(a[4],errs):[];
     if(errs.length){$("#warns").innerHTML=errs.map(function(e){return '<div class="warn err">'+e+' Dữ liệu chưa được cập nhật.</div>'}).join("");$("#msg").textContent="";$("#go").disabled=false;return}
-    if(!$("#thang").value&&p51.thang)$("#thang").value=p51.thang;build(db,p51,p58,ct,p54);STAGE=1;loadQuarter();$("#save").disabled=false;$("#msg").textContent="Đã kiểm tra, đang xem trước. Bấm Lưu lên Google Sheet để lưu cho tháng "+($("#thang").value||"(chọn tháng)")+".";$("#go").disabled=false
+    var tm=$("#thang").value;if(p51.thang){if(tm&&tm!==p51.thang)w0="Ô tháng đang chọn là "+tm+" nhưng file 5.1 là dữ liệu tháng "+p51.thang+", web đã đổi sang tháng "+p51.thang+". ";$("#thang").value=p51.thang}build(db,p51,p58,ct,p54);STAGE=1;loadQuarter();$("#save").disabled=false;$("#msg").textContent=w0+"Đã kiểm tra, đang xem trước. Bấm Lưu lên Google Sheet để lưu cho tháng "+($("#thang").value||"(chọn tháng)")+".";$("#go").disabled=false
   }).catch(function(e){$("#warns").innerHTML='<div class="warn err">Không đọc được file: '+e.message+'</div>';$("#msg").textContent="";$("#go").disabled=false})};
 
 function build(db,p51,L,ct,L4){
@@ -311,14 +311,15 @@ function postAll(ds,recs,T){var i=0;function next(){var b=recs.slice(i,i+3000);r
 $("#save").onclick=function(){var T=$("#thang").value;
   if(!/^\d{4}-\d{2}$/.test(T)){$("#msg").textContent="Hãy chọn tháng dữ liệu trước khi lưu.";return}
   if(API_URL.indexOf("PASTE")===0){$("#msg").textContent="Chưa gắn API_URL của Apps Script.";return}
-  var nz=function(x){return x==null?"":x};
+  if(THANGS.indexOf(T)>=0&&!confirm("Tháng "+T+" đã có dữ liệu trên Google Sheet. Lưu sẽ ghi đè riêng tháng "+T+" (các tháng khác giữ nguyên). Tiếp tục?"))return;
+  var PREV=THANGS.slice(),nz=function(x){return x==null?"":x};
   var steps=[["dinhbien",Object.keys(DBM).map(function(v){var d=DBM[v];return[d.mien,d.vung,nz(d.k5),nz(d.k1),nz(d.stc),(d.opao!=null||d.adca!=null)?nz(d.opao)+"|"+nz(d.adca):nz(d.oa),nz(d.si),nz(d.sua)]})],
     ["donhang",ORD.filter(function(o){return o.stc||o.k||o.oa}).map(function(o){return[o.id,o.ng,o.mp,o.np,o.v,o.stc,o.stcd,o.k,SPLIT?o.op+"|"+o.ad:o.oa,Object.keys(o.codes).join(","),Object.keys(o.nm).map(function(k){return k+"::"+o.nm[k]}).concat(Object.keys(o.ck||{}).map(function(k){return "CK:"+k+"::"+Math.round(o.ck[k])})).join("||")]})],
     ["cttl",L58.map(function(x){return[x.v,x.p,x.k,x.kn,x.mp,x.np,x.m+"|"+x.lv,x.ds]})]];
   if(L54.length)steps.push(["dangky",L54.map(function(x){return[x.v,x.p,x.k,x.kn,x.mp,x.np,x.m,x.st]})]);
   if(Object.keys(CT).length)steps.push(["ctkm",Object.keys(CT).map(function(k){return[k,CT[k],CTG[k]||""]})]);
   $("#save").disabled=true;var n=0;
-  (function run(){if(n>=steps.length)return loadServer(T).then(function(){STAGE=null;$("#msg").textContent="Đã lưu tháng "+T+" lên Google Sheet. Mọi người mở link sẽ thấy dữ liệu mới trong vòng 1 phút."});
+  (function run(){if(n>=steps.length)return loadServer(T).then(function(){STAGE=null;var lost=PREV.filter(function(m){return m!==T&&THANGS.indexOf(m)<0});$("#msg").textContent=lost.length?"⚠ Đã lưu tháng "+T+" nhưng tháng "+lost.join(", ")+" không còn trên Google Sheet: Apps Script đang xóa cả các tháng khác khi lưu. Gửi mình code Apps Script để sửa.":"Đã lưu tháng "+T+" lên Google Sheet. Mọi người mở link sẽ thấy dữ liệu mới trong vòng 1 phút."});
     var st=steps[n++];$("#msg").textContent="Đang lưu "+st[0]+" ("+st[1].length+" dòng)...";return postAll(st[0],st[1],T).then(run)})()
   .catch(function(e){$("#msg").textContent="Lưu thất bại: "+e.message+". Bấm Lưu lại để thử lại (dữ liệu tháng được ghi đè trọn vẹn).";$("#save").disabled=false})};
 var DBM={},lastVer=null;
