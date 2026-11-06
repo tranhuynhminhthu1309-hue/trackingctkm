@@ -150,7 +150,7 @@ $("#go").onclick=function(){
   }).catch(function(e){$("#warns").innerHTML='<div class="warn err">Không đọc được file: '+e.message+'</div>';$("#msg").textContent="";$("#go").disabled=false})};
 
 function build(db,p51,L,ct,L4){
-  CT=ct;L58=L;DBM=db;Object.keys(db).forEach(function(v){var d=db[v];if(d.k78!=null&&d.k5==null&&d.k1==null){if(is500(v))d.k5=d.k78;else d.k1=d.k78}});SPLIT=true;Object.keys(db).forEach(function(v){var d=db[v];if(d.opao==null&&d.adca==null&&d.oa!=null){d.opao=d.oa;d.adca=d.oa}}); /*dữ liệu cũ chỉ có 1 định biên Opao + ADCA: dùng chung cho cả hai*/L54=L4||[];var nn={},A={},B={},C={},CN={},unk={},um={},hasCT=Object.keys(ct).length>0;
+  CT=ct;L58=L;DBM=db;Object.keys(db).forEach(function(v){var d=db[v];if(d.k78!=null&&d.k5==null&&d.k1==null){if(is500(v))d.k5=d.k78;else d.k1=d.k78}});if(!OLDR())Object.keys(db).forEach(function(v){var d=db[v];if(d.k5!=null){if(d.k1==null)d.k1=d.k5;d.k5=null}}); /* từ T11 chỉ còn mức 1 triệu: dữ liệu T11 đã lưu theo mức 500K được chuyển sang 1 triệu */SPLIT=true;Object.keys(db).forEach(function(v){var d=db[v];if(d.opao==null&&d.adca==null&&d.oa!=null){d.opao=d.oa;d.adca=d.oa}}); /*dữ liệu cũ chỉ có 1 định biên Opao + ADCA: dùng chung cho cả hai*/L54=L4||[];var nn={},A={},B={},C={},CN={},unk={},um={},hasCT=Object.keys(ct).length>0;
   function add(M,k,d,c){var x=M[k]||(M[k]={n:0,d:0,c:0});x.n++;x.d+=d;x.c+=c||0}
   var ckv=function(o,cs){return cs.reduce(function(t,c){return t+((o.ck&&o.ck[c])||0)},0)};
   ORD=Object.keys(p51.O).map(function(id){var o=p51.O[id];o.id=id;o.vk=V(o.v);
