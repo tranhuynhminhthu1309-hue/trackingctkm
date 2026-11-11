@@ -406,7 +406,7 @@ setInterval(ping,60000);document.addEventListener("visibilitychange",function(){
  * Không đọc/ghi biến của BC 5.1 / BC 5.4 / BC 5.8 và không gọi Apps Script. */
 (function(){
 var LSK="m3_cfg_v1";
-var DEF={thr:{sua:1,fz:10,ww:20,shop:30},rw:{m1:6,m2:3,fz:1,ww:2,shop:250000},km:{sua:1,fz:1,shop:0},ret:1,dat:"Dat, Đạt",ok54:"Đã duyệt, Được duyệt",kw:{sua:"SPSUA",shop:"SHOPSUA",fz:"FROZEN"},map:{},sku:{}};
+var DEF={thr:{sua:1,fz:10,ww:20,shop:30},rw:{m1:6,m2:3,fz:1,ww:2,shop:250000},km:{sua:1,fz:1,shop:1},ret:1,dat:"Dat, Đạt",ok54:"Đã duyệt, Được duyệt",kw:{sua:"SPSUA",shop:"SHOPSUA",fz:"FROZEN"},map:{},sku:{}};
 var clone=function(o){return JSON.parse(JSON.stringify(o))};
 var CFG=clone(DEF);
 try{var sv=JSON.parse(localStorage.getItem(LSK)||"{}");Object.keys(DEF).forEach(function(k){if(sv[k]!=null)CFG[k]=typeof DEF[k]==="object"?Object.assign(clone(DEF[k]),sv[k]):sv[k]})}catch(e){}
