@@ -88,9 +88,9 @@ body.m3on #intro,body.m3on #sync,body.m3on #upc,body.m3on #warns,body.m3on #out{
 </section></div>
 
 <section id="m3" hidden>
-<div class="warn" id="m3ro" hidden>Màn hình này dùng để tải file và tính suất, dành cho tài khoản admin/Trade. Tài khoản chỉ xem vui lòng dùng màn hình Số suất CTKM &amp; CTTL.</div>
 <div id="m3main">
 <p class="sub">Tính số khách hàng đạt và quà thưởng của 3 chương trình trưng bày: Sữa, Frozen (thường và tủ đông Want Want), Shop Sữa. Đối chiếu theo Customer Code từ BC 7.2, file doanh số, BC 5.4 và danh sách tủ đông Want Want. Dữ liệu được tính ngay trên trình duyệt, không ghi lên Google Sheet và không ảnh hưởng đến các số liệu của 2 màn hình kia.</p>
+<div class="card" id="m3sbar"><div class="bar" style="margin:0"><b>Kết quả đã lưu theo kỳ</b><select id="m3sv" aria-label="Chọn kỳ đã lưu"><option value="">Đang tải danh sách kỳ...</option></select><button class="p" id="m3sbtn" hidden>💾 Lưu kết quả</button><span class="sub" id="m3smsg" style="margin:0"></span></div></div>
 <details class="card" id="m3up" open><summary><b>Tải dữ liệu tính suất CTTB</b></summary><div style="height:10px"></div>
 <div class="up">
 <label><input type="file" id="m3f72" accept=".xlsb,.xlsx,.xls,.csv"><b>BC 7.2 · Kết quả Trade chấm trưng bày</b><span id="m3s72">Bắt buộc · chưa chọn file</span></label>
@@ -437,7 +437,8 @@ var SPEC={
   {k:"mp",l:"Mã NPP",c:["MA NPP"],x:1},{k:"np",l:"Tên NPP",c:["TEN NPP"],x:1},{k:"gc",l:"Ghi chú",c:["GHI CHU"],x:1}]}
 };
 var IDS={f72:["m3f72","m3s72"],fso:["m3fso","m3sso"],f54:["m3f54","m3s54"],fww:["m3fww","m3sww"]};
-var RAW={},MP={},MODEL=null,PER="",TAB="sua",KQ="",SORT=0;
+var CC=function(){return MODEL&&MODEL.cfg||CFG};var canCalc=function(){return MODEL&&!MODEL.saved&&RAW.f72&&RAW.fso};
+var SAVED=[],RAW={},MP={},MODEL=null,PER="",TAB="sua",KQ="",SORT=0;
 
 /* ---------- đọc file ---------- */
 function readRows(f){return f.arrayBuffer().then(function(b){
@@ -458,7 +459,7 @@ function loadFile(key,file){
   return readRows(file).then(function(rows){
     var hi=findHdr(rows,SPEC[key].need);
     if(hi<0)throw new Error("không tìm thấy dòng tiêu đề có các cột: "+SPEC[key].need.join(", ").toLowerCase());
-    var H=rows[hi].map(N);RAW[key]={name:file.name,rows:rows,hi:hi,H:H,Ho:rows[hi].map(function(x){return tx(x)})};MP[key]=autoMap(key,H);
+    var H=rows[hi].map(N);RAW[key]={name:file.name,rows:rows,hi:hi,H:H,Ho:rows[hi].map(function(x){return tx(x)})};if(key==="f72"||key==="fso")PER=""; /* tải file mới: kỳ báo cáo tính lại theo BC 7.2 mới */MP[key]=autoMap(key,H);
     var miss=SPEC[key].req.filter(function(k){return MP[key][k]<0});
     st.className=miss.length?"":"ok";st.textContent=file.name+" · "+fx(rows.length-hi-1)+" dòng"+(miss.length?" · ⚠ chưa nhận diện cột: "+miss.join(", "):"")
   }).catch(function(e){delete RAW[key];delete MP[key];st.className="";st.style.color="var(--r)";st.textContent="Lỗi đọc "+file.name+": "+e.message;
@@ -466,9 +467,9 @@ function loadFile(key,file){
 Object.keys(IDS).forEach(function(k){$("#"+IDS[k][0]).onchange=function(e){var f=e.target.files[0];if(!f)return;
   $("#m3msg").innerHTML='<span class="spin"></span>Đang đọc file...';
   setTimeout(function(){loadFile(k,f).then(function(){$("#m3msg").textContent="";afterLoad()})},30)}});
-$("#m3clr").onclick=function(){RAW={};MP={};MODEL=null;Object.keys(IDS).forEach(function(k){$("#"+IDS[k][0]).value="";var s=$("#"+IDS[k][1]);s.className="";s.style.color="";s.textContent=({f72:"Bắt buộc",fso:"Bắt buộc",f54:"Cần cho Shop Sữa",fww:"Cần cho tủ đông Want Want"})[k]+" · chưa chọn file"});
-  $("#m3out").hidden=true;$("#m3warns").innerHTML="";afterLoad()};
-function afterLoad(){$("#m3go").disabled=!(RAW.f72&&RAW.fso);renderPrev();renderCfg();if(MODEL)calc()}
+$("#m3clr").onclick=function(){RAW={};MP={};PER="";if(MODEL&&!MODEL.saved)MODEL=null;Object.keys(IDS).forEach(function(k){$("#"+IDS[k][0]).value="";var s=$("#"+IDS[k][1]);s.className="";s.style.color="";s.textContent=({f72:"Bắt buộc",fso:"Bắt buộc",f54:"Cần cho Shop Sữa",fww:"Cần cho tủ đông Want Want"})[k]+" · chưa chọn file"});
+  if(!MODEL){$("#m3out").hidden=true;$("#m3warns").innerHTML=""}afterLoad()};
+function afterLoad(){$("#m3go").disabled=!(RAW.f72&&RAW.fso);renderPrev();renderCfg();if(canCalc())calc()}
 
 /* ---------- đọc dữ liệu theo mapping ---------- */
 var gv=function(key,r,k){var i=MP[key][k];return i>=0?r[i]:""};
@@ -581,9 +582,10 @@ function calc(){
   if(Object.keys(unk).length)W.push("Có giá trị Trade chấm khác Đạt/Chưa chấm/Không đạt, đang xem là không đạt: "+Object.keys(unk).join(", ")+". Vào phần Cấu hình nếu giá trị này nghĩa là Đạt.");
   if(spreadMuc)W.push(spreadMuc+" khách hàng Trưng bày Sữa có nhiều mức khác nhau trong BC 7.2 (lấy mức của dòng được ưu tiên).");
   var noReg=rows.filter(function(r){return r.mien==="(chưa xác định)"}).length;if(noReg)W.push(noReg+" dòng chưa xác định được Miền/Vùng (khách hàng không có trong file doanh số).");
-  MODEL={rows:rows,W:W,ky:ky72,pl:pl,nhom:Object.keys(nhom).map(function(k){return nhom[k]}),dupFW:dupFW,has:{ww:!!WW,shop:!!L54}};
+  MODEL={rows:rows,W:W,ky:ky72,pl:pl,nhom:Object.keys(nhom).map(function(k){return nhom[k]}),dupFW:dupFW,has:{ww:!!WW,shop:!!L54},cfg:{thr:clone(CFG.thr),rw:clone(CFG.rw)},saved:false};
+  $("#m3fk").hidden=false;
   $("#m3fk").innerHTML=pl.map(function(m){return'<option value="'+m+'"'+(m===PER?" selected":"")+'>Kỳ '+m+(m===ky72?" (BC 7.2)":"")+'</option>'}).join("")||'<option value="">Kỳ (không xác định)</option>';
-  fillF();renderCfg();$("#m3out").hidden=false;render()}
+  fillF();renderCfg();$("#m3out").hidden=false;render();updSave()}
 
 /* ---------- bộ lọc & hiển thị ---------- */
 function fillS(sel,all,vals,keep){var cur=keep?$(sel).value:"";$(sel).innerHTML='<option value="">'+all+'</option>'+uniq(vals).sort().map(function(x){return'<option value="'+E(x)+'">'+E(x)+'</option>'}).join("");if(cur&&vals.indexOf(cur)>=0)$(sel).value=cur}
@@ -607,15 +609,15 @@ function render(){if(!MODEL)return;var R=filt(),Z=summ(R),pf=$("#m3fp").value,sh
    (sh("fz")?kp("Khách hàng đạt Frozen thường",fmt(Z.fz.dat),[["Thùng Frozen 201ml",fmt(Z.fz.th)+" thùng"]]):"")+
    (sh("ww")?kp("Khách hàng đạt tủ đông Want Want",fmt(Z.ww.dat),[["Thùng Frozen 201ml",fmt(Z.ww.th)+" thùng"]]).replace('</div></div>','</div>'+no("ww","Chưa có danh sách")+'</div>'):"")+
    (sh("shop")?kp("Khách hàng đạt Shop Sữa",fmt(Z.shop.dat),[["Ngân sách thưởng",fmt(Z.shop.bud)+" đ"]]).replace('</div></div>','</div>'+no("shop","Chưa có BC 5.4")+'</div>'):"")+
-   ((sh("sua"))?kp("Tổng lốc ADCA cần thưởng",fmt(Z.sua.lo),[["Mức 1 × "+CFG.rw.m1+" + Mức 2 × "+CFG.rw.m2,fmt(Z.sua.m1)+" × "+CFG.rw.m1+" + "+fmt(Z.sua.m2)+" × "+CFG.rw.m2]]):"")+
-   ((sh("fz")||sh("ww"))?kp("Tổng thùng Frozen 201ml cần thưởng",fmt((sh("fz")?Z.fz.th:0)+(sh("ww")?Z.ww.th:0)),[["Frozen thường × "+CFG.rw.fz+" + Want Want × "+CFG.rw.ww,(sh("fz")?fmt(Z.fz.dat):"0")+" × "+CFG.rw.fz+" + "+(sh("ww")?fmt(Z.ww.dat):"0")+" × "+CFG.rw.ww]]):"")+
-   (sh("shop")?kp("Tổng ngân sách thưởng Shop Sữa",fmt(Z.shop.bud)+" đ",[["Số KH đạt × "+fmt(CFG.rw.shop)+" đ",fmt(Z.shop.dat)+" × "+fmt(CFG.rw.shop)]]):"");
+   ((sh("sua"))?kp("Tổng lốc ADCA cần thưởng",fmt(Z.sua.lo),[["Mức 1 × "+CC().rw.m1+" + Mức 2 × "+CC().rw.m2,fmt(Z.sua.m1)+" × "+CC().rw.m1+" + "+fmt(Z.sua.m2)+" × "+CC().rw.m2]]):"")+
+   ((sh("fz")||sh("ww"))?kp("Tổng thùng Frozen 201ml cần thưởng",fmt((sh("fz")?Z.fz.th:0)+(sh("ww")?Z.ww.th:0)),[["Frozen thường × "+CC().rw.fz+" + Want Want × "+CC().rw.ww,(sh("fz")?fmt(Z.fz.dat):"0")+" × "+CC().rw.fz+" + "+(sh("ww")?fmt(Z.ww.dat):"0")+" × "+CC().rw.ww]]):"")+
+   (sh("shop")?kp("Tổng ngân sách thưởng Shop Sữa",fmt(Z.shop.bud)+" đ",[["Số KH đạt × "+fmt(CC().rw.shop)+" đ",fmt(Z.shop.dat)+" × "+fmt(CC().rw.shop)]]):"");
   var kv=function(t,rows,note){return'<div class="card"><h2>'+t+'</h2><table class="kv"><thead><tr><th>Chỉ tiêu</th><th class="n">Kết quả</th></tr></thead><tbody>'+rows.map(function(r){return'<tr><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>'}).join("")+'</tbody></table>'+(note?'<p class="sub" style="margin:8px 0 0">'+note+'</p>':"")+'</div>'};
   $("#m3tabs4").innerHTML='<div class="g2">'+
-   (sh("sua")?kv("Bảng 1 · Trưng bày Sữa",[["Tổng KH trong danh sách",fmt(Z.sua.tot)],["Trade chấm Đạt",fmt(Z.sua.td)],["Đạt điều kiện doanh số (STC hoặc ADCA ≥ "+CFG.thr.sua+" thùng)",fmt(Z.sua.ds)],["Tổng KH đạt",fmt(Z.sua.dat)],["Mức 1 – "+CFG.rw.m1+" lốc ADCA",fmt(Z.sua.m1)+" suất"],["Mức 2 – "+CFG.rw.m2+" lốc ADCA",fmt(Z.sua.m2)+" suất"],["Tổng lốc ADCA",fmt(Z.sua.lo)]]):"")+
-   (sh("fz")?kv("Bảng 2 · Trưng bày Frozen thường",[["Tổng KH đủ điều kiện xét (đã loại KH trùng tủ đông WW)",fmt(Z.fz.tot)],["Trade chấm Đạt",fmt(Z.fz.td)],["Đạt doanh số ≥ "+CFG.thr.fz+" thùng",fmt(Z.fz.ds)],["Tổng KH đạt",fmt(Z.fz.dat)],["Tổng thùng Frozen 201ml",fmt(Z.fz.th)]],MODEL.dupFW?"Đã loại "+MODEL.dupFW+" KH trùng với tủ đông Want Want (toàn bộ dữ liệu, không phụ thuộc bộ lọc).":""):"")+
-   (sh("ww")?kv("Bảng 3 · Trưng bày tủ đông Want Want",[["Tổng KH đăng ký",fmt(Z.ww.tot)],["Đạt doanh số ≥ "+CFG.thr.ww+" thùng",fmt(Z.ww.ds)],["Tổng KH đạt",fmt(Z.ww.dat)],["Tổng thùng Frozen 201ml",fmt(Z.ww.th)]],MODEL.has.ww?"":"Chưa tải danh sách tủ đông Want Want."):"")+
-   (sh("shop")?kv("Bảng 4 · Trưng bày Shop Sữa",[["Tổng KH đăng ký BC 5.4",fmt(Z.shop.reg)],["KH trạng thái Đã duyệt",fmt(Z.shop.ap)],["Trade chấm Đạt (trong KH đã duyệt)",fmt(Z.shop.td)],["Đạt doanh số ≥ "+CFG.thr.shop+" thùng (trong KH đã duyệt)",fmt(Z.shop.ds)],["Tổng KH đạt",fmt(Z.shop.dat)],["Tổng ngân sách thưởng",fmt(Z.shop.bud)+" đ"]],MODEL.has.shop?"":"Chưa tải BC 5.4."):"")+'</div>';
+   (sh("sua")?kv("Bảng 1 · Trưng bày Sữa",[["Tổng KH trong danh sách",fmt(Z.sua.tot)],["Trade chấm Đạt",fmt(Z.sua.td)],["Đạt điều kiện doanh số (STC hoặc ADCA ≥ "+CC().thr.sua+" thùng)",fmt(Z.sua.ds)],["Tổng KH đạt",fmt(Z.sua.dat)],["Mức 1 – "+CC().rw.m1+" lốc ADCA",fmt(Z.sua.m1)+" suất"],["Mức 2 – "+CC().rw.m2+" lốc ADCA",fmt(Z.sua.m2)+" suất"],["Tổng lốc ADCA",fmt(Z.sua.lo)]]):"")+
+   (sh("fz")?kv("Bảng 2 · Trưng bày Frozen thường",[["Tổng KH đủ điều kiện xét (đã loại KH trùng tủ đông WW)",fmt(Z.fz.tot)],["Trade chấm Đạt",fmt(Z.fz.td)],["Đạt doanh số ≥ "+CC().thr.fz+" thùng",fmt(Z.fz.ds)],["Tổng KH đạt",fmt(Z.fz.dat)],["Tổng thùng Frozen 201ml",fmt(Z.fz.th)]],MODEL.dupFW?"Đã loại "+MODEL.dupFW+" KH trùng với tủ đông Want Want (toàn bộ dữ liệu, không phụ thuộc bộ lọc).":""):"")+
+   (sh("ww")?kv("Bảng 3 · Trưng bày tủ đông Want Want",[["Tổng KH đăng ký",fmt(Z.ww.tot)],["Đạt doanh số ≥ "+CC().thr.ww+" thùng",fmt(Z.ww.ds)],["Tổng KH đạt",fmt(Z.ww.dat)],["Tổng thùng Frozen 201ml",fmt(Z.ww.th)]],MODEL.has.ww?"":"Chưa tải danh sách tủ đông Want Want."):"")+
+   (sh("shop")?kv("Bảng 4 · Trưng bày Shop Sữa",[["Tổng KH đăng ký BC 5.4",fmt(Z.shop.reg)],["KH trạng thái Đã duyệt",fmt(Z.shop.ap)],["Trade chấm Đạt (trong KH đã duyệt)",fmt(Z.shop.td)],["Đạt doanh số ≥ "+CC().thr.shop+" thùng (trong KH đã duyệt)",fmt(Z.shop.ds)],["Tổng KH đạt",fmt(Z.shop.dat)],["Tổng ngân sách thưởng",fmt(Z.shop.bud)+" đ"]],MODEL.has.shop?"":"Chưa tải BC 5.4."):"")+'</div>';
   $("#m3warns").innerHTML=MODEL.W.map(function(t){return'<div class="warn">'+E(t)+'</div>'}).join("");
   renderDet()}
 var H0=["Miền","Vùng","NPP","Customer Code","Tên khách hàng","Trạng thái đăng ký","Kết quả Trade","Doanh số thực tế","Điều kiện doanh số","Kết quả cuối cùng","Lý do không đạt","Mức thưởng","Số lượng quà thưởng"],H1=["Phân loại chương trình","Trạng thái trùng danh sách","Chương trình được ưu tiên xét","Số thùng thưởng"];
@@ -640,10 +642,10 @@ $("#m3rs").onclick=function(){$("#m3fm").value="";$("#m3fv").value="";$("#m3fn")
 /* ---------- xuất Excel ---------- */
 function xlm(sh,name){var wb=XLSX.utils.book_new();sh.forEach(function(s){XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(s[1]),s[0].slice(0,31))});XLSX.writeFile(wb,name+".xlsx")}
 function sumAoa(Z,pf){var A=[],sh=function(p){return!pf||pf===p};A.push(["Chỉ tiêu","Kết quả"]);
-  if(sh("sua"))A.push(["TRƯNG BÀY SỮA",""],["Tổng KH trong danh sách",Z.sua.tot],["Trade chấm Đạt",Z.sua.td],["Đạt điều kiện doanh số",Z.sua.ds],["Tổng KH đạt",Z.sua.dat],["Mức 1 – "+CFG.rw.m1+" lốc ADCA",Z.sua.m1],["Mức 2 – "+CFG.rw.m2+" lốc ADCA",Z.sua.m2],["Tổng lốc ADCA",Z.sua.lo],["",""]);
-  if(sh("fz"))A.push(["FROZEN THƯỜNG",""],["Tổng KH đủ điều kiện xét",Z.fz.tot],["Trade chấm Đạt",Z.fz.td],["Đạt doanh số ≥ "+CFG.thr.fz+" thùng",Z.fz.ds],["Tổng KH đạt",Z.fz.dat],["Tổng thùng Frozen 201ml",Z.fz.th],["",""]);
-  if(sh("ww"))A.push(["TỦ ĐÔNG WANT WANT",""],["Tổng KH đăng ký",Z.ww.tot],["Đạt doanh số ≥ "+CFG.thr.ww+" thùng",Z.ww.ds],["Tổng KH đạt",Z.ww.dat],["Tổng thùng Frozen 201ml",Z.ww.th],["",""]);
-  if(sh("shop"))A.push(["SHOP SỮA",""],["Tổng KH đăng ký BC 5.4",Z.shop.reg],["KH trạng thái Đã duyệt",Z.shop.ap],["Trade chấm Đạt",Z.shop.td],["Đạt doanh số ≥ "+CFG.thr.shop+" thùng",Z.shop.ds],["Tổng KH đạt",Z.shop.dat],["Tổng ngân sách thưởng (VNĐ)",Z.shop.bud],["",""]);
+  if(sh("sua"))A.push(["TRƯNG BÀY SỮA",""],["Tổng KH trong danh sách",Z.sua.tot],["Trade chấm Đạt",Z.sua.td],["Đạt điều kiện doanh số",Z.sua.ds],["Tổng KH đạt",Z.sua.dat],["Mức 1 – "+CC().rw.m1+" lốc ADCA",Z.sua.m1],["Mức 2 – "+CC().rw.m2+" lốc ADCA",Z.sua.m2],["Tổng lốc ADCA",Z.sua.lo],["",""]);
+  if(sh("fz"))A.push(["FROZEN THƯỜNG",""],["Tổng KH đủ điều kiện xét",Z.fz.tot],["Trade chấm Đạt",Z.fz.td],["Đạt doanh số ≥ "+CC().thr.fz+" thùng",Z.fz.ds],["Tổng KH đạt",Z.fz.dat],["Tổng thùng Frozen 201ml",Z.fz.th],["",""]);
+  if(sh("ww"))A.push(["TỦ ĐÔNG WANT WANT",""],["Tổng KH đăng ký",Z.ww.tot],["Đạt doanh số ≥ "+CC().thr.ww+" thùng",Z.ww.ds],["Tổng KH đạt",Z.ww.dat],["Tổng thùng Frozen 201ml",Z.ww.th],["",""]);
+  if(sh("shop"))A.push(["SHOP SỮA",""],["Tổng KH đăng ký BC 5.4",Z.shop.reg],["KH trạng thái Đã duyệt",Z.shop.ap],["Trade chấm Đạt",Z.shop.td],["Đạt doanh số ≥ "+CC().thr.shop+" thùng",Z.shop.ds],["Tổng KH đạt",Z.shop.dat],["Tổng ngân sách thưởng (VNĐ)",Z.shop.bud],["",""]);
   A.push(["TỔNG QUÀ THƯỞNG",""],["Tổng lốc ADCA",sh("sua")?Z.sua.lo:0],["Tổng thùng Frozen 201ml",(sh("fz")?Z.fz.th:0)+(sh("ww")?Z.ww.th:0)],["Tổng ngân sách Shop Sữa (VNĐ)",sh("shop")?Z.shop.bud:0]);return A}
 function giftAoa(R){var G={};R.filter(function(r){return r.kq&&!r.out}).forEach(function(r){var k=r.mien+"|"+r.vung+"|"+r.mp,g=G[k]||(G[k]={mien:r.mien,vung:r.vung,mp:r.mp,np:r.np,m1:0,m2:0,lo:0,fz:0,ww:0,th:0,sh:0,bud:0});
   if(r.p==="sua"){if(r.muc==="1")g.m1++;else g.m2++;g.lo+=r.qua}else if(r.p==="fz"){g.fz++;g.th+=r.qua}else if(r.p==="ww"){g.ww++;g.th+=r.qua}else{g.sh++;g.bud+=r.qua}});
@@ -684,10 +686,10 @@ function renderCfg(){var c=CFG,h='<div class="cfgg">'+
   $("#m3cfgb").innerHTML=h}
 function setPath(p,v){var a=p.split(".");if(a.length===1)CFG[a[0]]=v;else CFG[a[0]][a[1]]=v}
 $("#m3cfgb").onchange=function(e){var t=e.target,d=t.dataset;
-  if(d.cfg!=null){var v=t.type==="checkbox"?(t.checked?1:0):t.type==="number"?(+t.value||0):t.value;setPath(d.cfg,v);save();if(MODEL)busy(calc);return}
+  if(d.cfg!=null){var v=t.type==="checkbox"?(t.checked?1:0):t.type==="number"?(+t.value||0):t.value;setPath(d.cfg,v);save();if(canCalc())busy(calc);return}
   if(d.mp){var s=d.mp.split("|"),k=s[0],f=s[1],i=+t.value;(CFG.map[k]=CFG.map[k]||{})[f]=i<0?"-":RAW[k].H[i];save();MP[k][f]=i;afterLoad();return}
-  if(d.sku){var s=d.sku.split("|"),c=s.pop(),key=s.join("|"),ng=s[0],nh=s.slice(1).join("|"),f=Object.assign({},flags(ng,nh));f[c]=t.checked?1:0;CFG.sku[key]=f;save();if(MODEL)busy(calc)}};
-$("#m3cfgb").onclick=function(e){if(e.target.id==="m3cd"){CFG=Object.assign(clone(DEF),{map:CFG.map,sku:CFG.sku});save();renderCfg();if(MODEL)busy(calc)}};
+  if(d.sku){var s=d.sku.split("|"),c=s.pop(),key=s.join("|"),ng=s[0],nh=s.slice(1).join("|"),f=Object.assign({},flags(ng,nh));f[c]=t.checked?1:0;CFG.sku[key]=f;save();if(canCalc())busy(calc)}};
+$("#m3cfgb").onclick=function(e){if(e.target.id==="m3cd"){CFG=Object.assign(clone(DEF),{map:CFG.map,sku:CFG.sku});save();renderCfg();if(canCalc())busy(calc)}};
 
 /* ---------- chạy tính toán ---------- */
 function busy(fn){$("#m3msg").innerHTML='<span class="spin"></span>Đang tính toán...';$("#m3go").disabled=true;
@@ -699,10 +701,42 @@ $("#m3go").onclick=function(){
   if(bad.length){$("#m3warns").innerHTML='<div class="warn err">Chưa nhận diện được cột: '+E(bad.join("; "))+'. Mở phần Cấu hình để chọn cột tương ứng.</div>';$("#m3cfg").open=true;return}
   $("#m3warns").innerHTML="";busy(function(){calc();$("#m3up").open=false})};
 
+/* ---------- lưu / xem kết quả theo kỳ (Google Sheet, dataset "cttb") ---------- */
+var isMon=function(m){return/^\d{4}-\d{2}$/.test(m||"")};
+function fillSaved(cur){$("#m3sv").innerHTML='<option value="">'+(SAVED.length?"— chọn kỳ đã lưu —":"Chưa có kỳ nào được lưu")+'</option>'+SAVED.map(function(m){return'<option value="'+m+'"'+(m===cur?" selected":"")+'>Kỳ '+m+'</option>'}).join("")}
+function updSave(){var b=$("#m3sbtn"),adm=!!($("#upc")&&!$("#upc").hidden);b.hidden=!(adm&&MODEL&&!MODEL.saved&&isMon(PER));if(!b.hidden)b.textContent="💾 Lưu kết quả kỳ "+PER+(SAVED.indexOf(PER)>=0?" (ghi đè)":"")}
+var FLD=["p","mien","vung","mp","np","kh","kn","dk","td","ds","dsTxt","dsCond","","","ly","muc","qua","qt","qu","loai","trung","uu"];
+function recsOf(M){var meta=JSON.stringify({W:M.W,dupFW:M.dupFW,has:M.has,ky:M.ky,cfg:M.cfg}),a=M.rows.map(function(r){
+    return[r.p,r.mien,r.vung,r.mp,r.np,r.kh,r.kn,r.dk,r.td,r.ds,r.dsTxt,r.dsCond,(r.tdOk?1:0)+""+(r.dsOk?1:0)+(r.ap?1:0)+(r.out?1:0),r.kq?1:0,r.ly,r.muc,r.qua,r.qt,r.qu,r.loai||"",r.trung||"",r.uu||"",""]});
+  a.unshift(["META","","","","","","","","","","","","","","","","","","","","","",meta]);return a}
+function fromRows(rows,t){var meta={},R=[];
+  rows.forEach(function(r){if(r[0]==="META"){try{meta=JSON.parse(r[22])}catch(e){}return}
+    var f=String(r[12]);while(f.length<4)f="0"+f;
+    R.push({p:r[0],mien:r[1],vung:r[2],mp:String(r[3]),np:String(r[4]),kh:String(r[5]),kn:String(r[6]),dk:String(r[7]),td:String(r[8]),ds:+r[9]||0,dsTxt:String(r[10]),dsCond:String(r[11]),tdOk:f[0]==="1",dsOk:f[1]==="1",ap:f[2]==="1",out:f[3]==="1",kq:String(r[13])==="1",ly:String(r[14]),muc:String(r[15]).replace(/\.0+$/,""),qua:+r[16]||0,qt:String(r[17]),qu:String(r[18]),loai:String(r[19]),trung:String(r[20]),uu:String(r[21])})});
+  return{rows:R,W:meta.W||[],ky:meta.ky||t,pl:[t],nhom:[],dupFW:meta.dupFW||0,has:meta.has||{ww:true,shop:true},cfg:meta.cfg&&meta.cfg.thr&&meta.cfg.rw?meta.cfg:{thr:clone(CFG.thr),rw:clone(CFG.rw)},saved:true,month:t}}
+function loadSaved(t,quiet,listOnly){$("#m3smsg").innerHTML='<span class="spin"></span>Đang tải...';
+  return fetch(API_URL+"?mod=cttb&pin="+encodeURIComponent($("#pin").value)+"&thang="+encodeURIComponent(t||"latest")+"&t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){
+    if(!j.ok)throw new Error(j.error||"lỗi không xác định");if(!j.rows)throw new Error("Apps Script chưa được cập nhật bản có Module 3");
+    SAVED=j.thangs||[];fillSaved(MODEL&&MODEL.saved?MODEL.month:"");$("#m3smsg").textContent="";
+    if(listOnly||!j.rows.length){if(!SAVED.length)$("#m3smsg").textContent="Chưa có kết quả nào được lưu.";updSave();return}
+    MODEL=fromRows(j.rows,j.thang);PER=j.thang;fillSaved(j.thang);$("#m3fk").hidden=true;fillF();$("#m3out").hidden=false;render();updSave();
+    $("#m3smsg").textContent="Đang xem kết quả đã lưu của kỳ "+j.thang+"."}).catch(function(e){$("#m3smsg").textContent=quiet?"":"Không tải được: "+e.message;if(quiet){fillSaved("")}})}
+$("#m3sv").onchange=function(){var t=this.value;if(!t)return;
+  if(MODEL&&!MODEL.saved&&!confirm("Kết quả vừa tính chưa được lưu sẽ bị thay bằng kết quả đã lưu của kỳ "+t+". Tiếp tục?")){fillSaved("");return}
+  loadSaved(t)};
+$("#m3sbtn").onclick=function(){if(!MODEL||MODEL.saved)return;
+  if(!isMon(PER)){$("#m3smsg").textContent="Chưa xác định được kỳ báo cáo (cần cột Kỳ trong BC 7.2).";return}
+  if(SAVED.indexOf(PER)>=0&&!confirm("Kỳ "+PER+" đã có kết quả đã lưu. Lưu sẽ ghi đè riêng kỳ "+PER+" (các kỳ khác giữ nguyên). Tiếp tục?"))return;
+  var recs=recsOf(MODEL),T=PER,b=$("#m3sbtn");b.disabled=true;$("#m3smsg").innerHTML='<span class="spin"></span>Đang lưu '+fmt(recs.length-1)+' dòng...';
+  postAll("cttb",recs,T).then(function(){return loadSaved(T)}).then(function(){$("#m3smsg").textContent="Đã lưu kết quả kỳ "+T+". Mọi người mở link sẽ xem được."}).catch(function(e){var m=String(e.message);$("#m3smsg").textContent="Lưu thất bại: "+m+(/dataset/.test(m)?" (Apps Script cần được cập nhật bản mới có Module 3)":"")+". Bấm Lưu lại để thử lại."}).then(function(){b.disabled=false})};
+
 /* ---------- điều hướng giữa các màn hình ---------- */
 function showM3(on){document.body.classList.toggle("m3on",on);$("#m3").hidden=!on;
   Array.prototype.forEach.call($("#mnav").children,function(b){b.className=(b.dataset.v==="m3")===on?"on":""});
-  if(on){var ro=$("#upc")&&$("#upc").hidden;$("#m3ro").hidden=!ro;$("#m3main").hidden=!!ro}}
+  if(on){var ro=!!($("#upc")&&$("#upc").hidden); // tài khoản chỉ xem: chỉ xem kết quả đã lưu
+    ["#m3up","#m3cfg","#m3prev"].forEach(function(id){$(id).hidden=ro});updSave();
+    if(!MODEL&&!SAVEDTRIED){SAVEDTRIED=1;loadSaved("latest",1)}else if(!SAVED.length&&!SAVEDTRIED2){SAVEDTRIED2=1;loadSaved(MODEL&&MODEL.saved?MODEL.month:"latest",1,1)}}}
+var SAVEDTRIED=0,SAVEDTRIED2=0;
 $("#mnav").onclick=function(e){var b=e.target.closest("button");if(b)showM3(b.dataset.v==="m3")};
 afterLoad();
 })();
