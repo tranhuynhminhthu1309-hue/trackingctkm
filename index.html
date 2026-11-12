@@ -107,6 +107,9 @@ body.m3on #intro,body.m3on #sync,body.m3on #upc,body.m3on #warns,body.m3on #out{
 <div class="bar fb"><select id="m3fk" aria-label="Kỳ báo cáo"></select><select id="m3fm" aria-label="Miền"></select><select id="m3fv" aria-label="Vùng"></select><select id="m3fn" aria-label="NPP"></select><select id="m3fp" aria-label="Chương trình"><option value="">Tất cả chương trình</option><option value="sua">Trưng bày Sữa</option><option value="fz">Frozen thường</option><option value="ww">Tủ đông Want Want</option><option value="shop">Shop Sữa</option></select><button id="m3rs">Xóa bộ lọc</button></div>
 <div class="kpis" id="m3kpi"></div>
 <div id="m3tabs4"></div>
+<section class="card" id="m3ov"><h2>Tổng quan theo vùng / NPP</h2>
+<div class="bar"><div class="seg" id="m3ovm"><button data-v="v" class="on">Xem theo vùng</button><button data-v="n">Xem theo NPP</button></div><span class="sub" style="margin:0">Bấm vào tên vùng/NPP hoặc con số để lọc và xem chi tiết khách hàng bên dưới.</span></div>
+<div class="tw"><table class="m3t" id="m3ovt"></table></div></section>
 <section class="card"><h2>Chi tiết khách hàng</h2>
 <div class="bar"><div class="seg" id="m3pt"><button data-v="sua" class="on">Trưng bày Sữa</button><button data-v="fz">Frozen thường</button><button data-v="ww">Tủ đông Want Want</button><button data-v="shop">Shop Sữa</button></div></div>
 <div class="bar fb"><select id="m3dv" aria-label="Lọc vùng trong chi tiết"></select><select id="m3dn" aria-label="Lọc NPP trong chi tiết"></select></div>
@@ -627,13 +630,35 @@ function render(){if(!MODEL)return;var R=filt(),Z=summ(R),pf=$("#m3fp").value,sh
    (sh("ww")?kv("Bảng 3 · Trưng bày tủ đông Want Want",[["Tổng KH đăng ký",fmt(Z.ww.tot)],["Đạt doanh số ≥ "+CC().thr.ww+" thùng",fmt(Z.ww.ds)],["Tổng KH đạt",fmt(Z.ww.dat)],["Tổng thùng Frozen 201ml",fmt(Z.ww.th)]],MODEL.has.ww?"":"Chưa tải danh sách tủ đông Want Want."):"")+
    (sh("shop")?kv("Bảng 4 · Trưng bày Shop Sữa",[["Tổng KH đăng ký BC 5.4",fmt(Z.shop.reg)],["KH trạng thái Đã duyệt",fmt(Z.shop.ap)],["Trade chấm Đạt (trong KH đã duyệt)",fmt(Z.shop.td)],["Đạt điều kiện doanh số (≥ "+shopLbl()+") (trong KH đã duyệt)",fmt(Z.shop.ds)],["Tổng KH đạt",fmt(Z.shop.dat)],["Tổng ngân sách thưởng",fmt(Z.shop.bud)+" đ"]],MODEL.has.shop?"":"Chưa tải BC 5.4."):"")+'</div>';
   $("#m3warns").innerHTML=MODEL.W.map(function(t){return'<div class="warn">'+E(t)+'</div>'}).join("");
-  renderDet()}
+  renderOv();renderDet()}
 var H0=["Miền","Vùng","NPP","Customer Code","Tên khách hàng","Trạng thái đăng ký","Kết quả Trade","Doanh số thực tế","Điều kiện doanh số","Kết quả cuối cùng","Lý do không đạt","Mức thưởng","Số lượng quà thưởng"],H1=["Phân loại chương trình","Trạng thái trùng danh sách","Chương trình được ưu tiên xét","Số thùng thưởng"];
 var heads=function(p){return p==="fz"||p==="ww"?H0.concat(H1):H0};
 function arr(r){var a=[r.mien,r.vung,(r.mp?r.mp+" - ":"")+r.np,r.kh,r.kn,r.dk,r.td,r.ds,r.dsTxt+" ("+r.dsCond+")",r.kq?"Đạt":"Không đạt",r.ly,r.qt,r.qua];
   if(r.p==="fz"||r.p==="ww")a=a.concat([r.loai,r.trung,r.uu,r.kq?r.qua:0]);return a}
 function detRows(p){var q=N($("#m3q").value);var a=filt(1).filter(function(r){return r.p===p&&(!KQ||(KQ==="1")===r.kq)&&(!q||N(r.kh+" "+r.kn).indexOf(q)>=0)});
   if(SORT)a=a.slice().sort(function(x,y){return SORT*(y.ds-x.ds)});return a}
+var OVM="v";
+function renderOv(){var R=filt(),pf=$("#m3fp").value,PS=P.filter(function(p){return!pf||pf===p}),G={},ks=[];
+  R.forEach(function(r){if(r.out)return;var k=OVM==="v"?r.mien+"|"+r.vung:(r.mp||"(chưa xác định)")+"|"+r.vung;
+    if(!G[k]){G[k]={k:k,mien:r.mien,vung:r.vung,mp:r.mp,np:r.np,c:{}};ks.push(k);P.forEach(function(p){G[k].c[p]={t:0,d:0}})}
+    var c=G[k].c[r.p];c.t++;if(r.kq)c.d++});
+  ks.sort(function(a,b){return(G[a].mien+G[a].vung+(G[a].mp||"")).localeCompare(G[b].mien+G[b].vung+(G[b].mp||""),"vi")});
+  var tot={};P.forEach(function(p){tot[p]={t:0,d:0}});ks.forEach(function(k){P.forEach(function(p){tot[p].t+=G[k].c[p].t;tot[p].d+=G[k].c[p].d})});
+  var has=function(p){return tot[p].t>0};
+  var h1='<thead><tr><th rowspan="2">'+(OVM==="v"?"Vùng":"NPP")+'</th>'+PS.map(function(p){return'<th colspan="3" class="n" style="text-align:center">'+PN[p]+'</th>'}).join("")+'</tr><tr>'+PS.map(function(){return'<th class="n">Tham gia</th><th class="n">Đạt</th><th class="n">% đạt</th>'}).join("")+'</tr></thead>';
+  var cell=function(c,p,k,tp){if(!has(p))return'<td class="n">—</td><td class="n">—</td><td class="n">—</td>';
+    var a=function(v){return tp?fmt(v):'<a href="#" class="m3go" data-k="'+E(k)+'" data-p="'+p+'">'+fmt(v)+'</a>'};
+    return'<td class="n">'+a(c.t)+'</td><td class="n">'+a(c.d)+'</td><td class="n">'+(c.t?Math.round(c.d/c.t*100)+"%":"—")+'</td>'};
+  var body=ks.map(function(k){var g=G[k],nm=OVM==="v"?E(g.vung)+' <span class="sub" style="margin:0">'+E(g.mien)+'</span>':E(g.mp?g.mp+(g.np?" - "+g.np:""):"(chưa xác định)")+' <span class="sub" style="margin:0">'+E(g.vung)+'</span>';
+    return'<tr><td><a href="#" class="m3go" data-k="'+E(k)+'">'+nm+'</a></td>'+PS.map(function(p){return cell(g.c[p],p,k)}).join("")+'</tr>'}).join("");
+  var foot='<tr><td><b>Tổng</b></td>'+PS.map(function(p){return cell(tot[p],p,"",1).replace(/<td class="n">/g,'<td class="n"><b>').replace(/<\/td>/g,'</b></td>')}).join("")+'</tr>';
+  $("#m3ovt").innerHTML=h1+'<tbody>'+(ks.length?body+foot:'<tr><td colspan="'+(1+PS.length*3)+'">Không có dữ liệu.</td></tr>')+'</tbody>';
+  window.__ovG=G}
+$("#m3ovm").onclick=function(e){var b=e.target.closest("button");if(b){OVM=b.dataset.v;seg("#m3ovm",OVM);renderOv()}};
+$("#m3ovt").onclick=function(e){var a=e.target.closest("a.m3go");if(!a)return;e.preventDefault();var g=window.__ovG[a.dataset.k];if(!g)return;
+  $("#m3fm").value=g.mien;fillF();$("#m3fv").value=g.vung;fillF();if(OVM==="n"&&g.mp){$("#m3fn").value=g.mp;syncD()}
+  if(a.dataset.p){TAB=a.dataset.p;SORT=0;seg("#m3pt",TAB)}
+  render();var d=$("#m3tb");if(d&&d.scrollIntoView)d.scrollIntoView({behavior:"smooth",block:"start"})};
 function renderDet(){var p=TAB,a=detRows(p),h=heads(p),nIdx=[7,12,15];
   $("#m3cnt").textContent=fmt(a.length)+" khách hàng";
   $("#m3tb").innerHTML='<thead><tr>'+h.map(function(x,i){return'<th class="'+(nIdx.indexOf(i)>=0?"n":"")+(i===7?" so":"")+'" '+(i===7?'data-so="1" title="Bấm để sắp xếp"':"")+'>'+x+(i===7?(SORT===1?" ▼":SORT===-1?" ▲":""):"")+'</th>'}).join("")+'</tr></thead><tbody>'+
