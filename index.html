@@ -91,6 +91,7 @@ body.m3on #intro,body.m3on #sync,body.m3on #upc,body.m3on #warns,body.m3on #out{
 <div id="m3main">
 <p class="sub">Tính số khách hàng đạt và quà thưởng của 3 chương trình trưng bày: Sữa, Frozen (thường và tủ đông Want Want), Shop Sữa. Đối chiếu theo Customer Code từ BC 7.2, file doanh số, BC 5.4 và danh sách tủ đông Want Want. Dữ liệu được tính ngay trên trình duyệt; kết quả tính xong được tự lưu theo kỳ lên Google Sheet (tab riêng, không ảnh hưởng số liệu của 2 màn hình kia).</p>
 <div class="card" id="m3sbar"><div class="bar" style="margin:0"><b>Kết quả đã lưu theo kỳ</b><select id="m3sv" aria-label="Chọn kỳ đã lưu"><option value="">Đang tải danh sách kỳ...</option></select><button class="p" id="m3sbtn" hidden>💾 Lưu kết quả</button><span class="sub" id="m3smsg" style="margin:0"></span></div></div>
+<p class="sub" id="m3who" style="margin:-4px 0 10px"></p>
 <details class="card" id="m3up" open><summary><b>Tải dữ liệu tính suất CTTB</b></summary><div style="height:10px"></div>
 <div class="up">
 <label><input type="file" id="m3f72" accept=".xlsb,.xlsx,.xls,.csv"><b>BC 7.2 · Kết quả Trade chấm trưng bày</b><span id="m3s72">Bắt buộc · chưa chọn file</span></label>
@@ -365,7 +366,7 @@ function showLogin(msg){try{localStorage.removeItem(PK);sessionStorage.removeIte
 $("#lgb").onclick=function(){var p=$("#lgp").value.trim();if(!p)return;$("#pin").value=p;try{($("#lgr").checked?localStorage:sessionStorage).setItem(PK,p)}catch(e){}$("#lgp").value="";$("#lg").close();loadServer("latest")};
 $("#lgp").onkeydown=function(e){if(e.key==="Enter")$("#lgb").onclick()};
 $("#lg").oncancel=function(e){e.preventDefault()};
-function logout(){try{localStorage.removeItem(PK);sessionStorage.removeItem(PK)}catch(e){}$("#pin").value="";$("#out").hidden=true;$("#lgm").textContent="";$("#lg").showModal()}
+function logout(){try{localStorage.removeItem(PK);sessionStorage.removeItem(PK)}catch(e){}$("#pin").value="";$("#out").hidden=true;if(window.m3Auth)window.m3Auth();$("#lgm").textContent="";$("#lg").showModal()}
 function post(b){return fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(Object.assign({pin:$("#pin").value},b))}).then(function(r){return r.json()}).then(function(j){if(!j.ok)throw new Error(j.error||"Lỗi không xác định");return j})}
 function postAll(ds,recs,T){var i=0;function next(){var b=recs.slice(i,i+3000);return post({dataset:ds,thang:T,clear:i===0,records:b}).then(function(){i+=3000;return i<recs.length?next():null})}return next()}
 $("#save").onclick=function(){var T=$("#thang").value;
@@ -387,7 +388,7 @@ function loadServer(t){
   if(API_URL.indexOf("PASTE")===0){$("#warns").innerHTML='<div class="warn">Chưa gắn API_URL: thay <code>PASTE_YOUR_CTKM_APPS_SCRIPT_URL_HERE</code> bằng URL Web app Apps Script.</div>';return Promise.resolve()}
   return fetch(API_URL+"?pin="+encodeURIComponent($("#pin").value)+"&thang="+encodeURIComponent(t||"latest")+"&t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){
     if(!j.ok){if(j.authError){showLogin(j.error);return}$("#warns").innerHTML='<div class="warn err">'+E(j.error)+'</div>';return}
-    $("#upc").hidden=!j.auth.canUpload;lastVer=j.ver;$("#sync").innerHTML=(+j.ver?"Dữ liệu cập nhật lần cuối: "+E(new Date(+j.ver).toLocaleString("vi-VN"))+" · tự đồng bộ khi có dữ liệu mới.":"Chưa có dữ liệu nào được lưu.")+" · "+E(whoText(j.auth))+(j.auth.open?' <b style="color:var(--r)">⚠ Chưa bật phân quyền: ai có link cũng xem và tải được dữ liệu.</b>':' · <a href="#" id="lo">Đăng xuất</a>');if($("#lo"))$("#lo").onclick=function(e){e.preventDefault();logout()};
+    $("#upc").hidden=!j.auth.canUpload;if(window.m3Auth)window.m3Auth();lastVer=j.ver;$("#sync").innerHTML=(+j.ver?"Dữ liệu cập nhật lần cuối: "+E(new Date(+j.ver).toLocaleString("vi-VN"))+" · tự đồng bộ khi có dữ liệu mới.":"Chưa có dữ liệu nào được lưu.")+" · "+E(whoText(j.auth))+(j.auth.open?' <b style="color:var(--r)">⚠ Chưa bật phân quyền: ai có link cũng xem và tải được dữ liệu.</b>':' · <a href="#" id="lo">Đăng xuất</a>');if($("#lo"))$("#lo").onclick=function(e){e.preventDefault();logout()};
     THANGS=j.thangs||[];$("#fth").innerHTML=j.thangs.map(function(m){return '<option value="'+m+'"'+(m===j.thang?' selected':'')+'>Tháng '+m+'</option>'}).join("");
     if(!j.thang||!j.dinhbien.length){$("#out").hidden=true;$("#warns").innerHTML='<div class="warn">Chưa có dữ liệu cho tháng này. Tải 3 file rồi bấm Kiểm tra file và Lưu.</div>';return}
     $("#upc").open=false;var nz=function(x){return x===""||x==null?null:Number(x)},db={},O={},ct={};
@@ -593,7 +594,7 @@ function calc(){
   if(spreadMuc)W.push(spreadMuc+" khách hàng Trưng bày Sữa có nhiều mức khác nhau trong BC 7.2 (lấy mức của dòng được ưu tiên).");
   var noReg=rows.filter(function(r){return r.mien==="(chưa xác định)"}).length;if(noReg)W.push(noReg+" dòng chưa xác định được Miền/Vùng (khách hàng không có trong file doanh số).");
   MODEL={rows:rows,W:W,ky:ky72,pl:pl,nhom:Object.keys(nhom).map(function(k){return nhom[k]}),dupFW:dupFW,has:{ww:!!WW,shop:!!L54},cfg:{thr:clone(CFG.thr),rw:clone(CFG.rw)},saved:false};
-  $("#m3fk").hidden=false;
+  LOADPIN=$("#pin").value;$("#m3fk").hidden=false;
   $("#m3fk").innerHTML=pl.map(function(m){return'<option value="'+m+'"'+(m===PER?" selected":"")+'>Kỳ '+m+(m===ky72?" (BC 7.2)":"")+'</option>'}).join("")||'<option value="">Kỳ (không xác định)</option>';
   fillF();renderCfg();$("#m3out").hidden=false;render();updSave();if($("#upc")&&!$("#upc").hidden&&isMon(PER))doSave(true)}
 
@@ -747,10 +748,10 @@ function fromRows(rows,t){var meta={},R=[];
     var f=String(r[12]);while(f.length<4)f="0"+f;
     R.push({p:r[0],mien:r[1],vung:r[2],mp:String(r[3]),np:String(r[4]),kh:String(r[5]),kn:String(r[6]),dk:String(r[7]),td:String(r[8]),ds:+r[9]||0,dsTxt:String(r[10]),dsCond:String(r[11]),tdOk:f[0]==="1",dsOk:f[1]==="1",ap:f[2]==="1",out:f[3]==="1",kq:String(r[13])==="1",ly:String(r[14]),muc:String(r[15]).replace(/\.0+$/,""),qua:+r[16]||0,qt:String(r[17]),qu:String(r[18]),loai:String(r[19]),trung:String(r[20]),uu:String(r[21])})});
   return{rows:R,W:meta.W||[],ky:meta.ky||t,pl:[t],nhom:[],dupFW:meta.dupFW||0,has:meta.has||{ww:true,shop:true},cfg:meta.cfg&&meta.cfg.thr&&meta.cfg.rw?meta.cfg:{thr:clone(CFG.thr),rw:clone(CFG.rw)},saved:true,month:t}}
-function loadSaved(t,quiet,listOnly){$("#m3smsg").innerHTML='<span class="spin"></span>Đang tải...';
+function loadSaved(t,quiet,listOnly){LOADPIN=$("#pin").value;$("#m3smsg").innerHTML='<span class="spin"></span>Đang tải...';
   return fetch(API_URL+"?mod=cttb&pin="+encodeURIComponent($("#pin").value)+"&thang="+encodeURIComponent(t||"latest")+"&t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){
     if(!j.ok)throw new Error(j.error||"lỗi không xác định");if(!j.rows)throw new Error("Apps Script chưa được cập nhật bản có Module 3");
-    SAVED=j.thangs||[];fillSaved(MODEL&&MODEL.saved?MODEL.month:"");$("#m3smsg").textContent="";
+    SAVED=j.thangs||[];fillSaved(MODEL&&MODEL.saved?MODEL.month:"");$("#m3smsg").textContent="";if(j.auth&&window.whoText)$("#m3who").textContent="Tài khoản: "+whoText(j.auth);
     if(listOnly||!j.rows.length){if(!SAVED.length)$("#m3smsg").textContent="Chưa có kết quả nào được lưu.";updSave();return}
     MODEL=fromRows(j.rows,j.thang);PER=j.thang;fillSaved(j.thang);$("#m3fk").hidden=true;fillF();$("#m3out").hidden=false;render();updSave();
     $("#m3smsg").textContent="Đang xem kết quả đã lưu của kỳ "+j.thang+"."}).catch(function(e){$("#m3smsg").textContent=quiet?"":"Không tải được: "+e.message;if(quiet){fillSaved("")}})}
@@ -770,7 +771,11 @@ function showM3(on){document.body.classList.toggle("m3on",on);$("#m3").hidden=!o
   if(on){var ro=!!($("#upc")&&$("#upc").hidden); // tài khoản chỉ xem: chỉ xem kết quả đã lưu
     ["#m3up","#m3cfg","#m3prev"].forEach(function(id){$(id).hidden=ro});updSave();
     if(!MODEL&&!SAVEDTRIED){SAVEDTRIED=1;loadSaved("latest",1)}else if(!SAVED.length&&!SAVEDTRIED2){SAVEDTRIED2=1;loadSaved(MODEL&&MODEL.saved?MODEL.month:"latest",1,1)}}}
-var SAVEDTRIED=0,SAVEDTRIED2=0;
+var SAVEDTRIED=0,SAVEDTRIED2=0,LOADPIN=null;
+/* đổi tài khoản (nhập PIN khác / đăng xuất): bỏ kết quả đã lưu của tài khoản trước và tải lại theo phạm vi của PIN mới */
+window.m3Auth=function(){var p=$("#pin").value;
+  if(LOADPIN!==null&&LOADPIN!==p){$("#m3clr").onclick();MODEL=null;$("#m3out").hidden=true;$("#m3kpi").innerHTML="";$("#m3tabs4").innerHTML="";$("#m3prev").innerHTML="";$("#m3warns").innerHTML="";$("#m3who").textContent="";$("#m3smsg").textContent="";
+    SAVED=[];fillSaved("");SAVEDTRIED=0;SAVEDTRIED2=0;LOADPIN=null;if(p&&!$("#m3").hidden)showM3(true)}};
 $("#mnav").onclick=function(e){var b=e.target.closest("button");if(b)showM3(b.dataset.v==="m3")};
 afterLoad();
 })();
