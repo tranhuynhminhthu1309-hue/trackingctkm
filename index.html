@@ -127,7 +127,7 @@ var N=function(s){return String(s==null?"":s).normalize("NFD").replace(/[\u0300-
 var V=function(s){return N(s).replace("TP HO CHI MINH","TP HCM")};
 var num=function(v){var n=Number(String(v).replace(/,/g,""));return isFinite(n)?n:0};
 var fmt=function(n){return Math.round(n).toLocaleString("vi-VN")};
-var API_URL=https://script.google.com/macros/s/AKfycbzB_k5_t_jOwDFMw1jEt3AwxJlumfgf2FJm2UmXhJF8gpd3Il_2zhIGVXI9fPNfDpn4/exec;
+var API_URL="https://script.google.com/macros/s/AKfycbzB_k5_t_jOwDFMw1jEt3AwxJlumfgf2FJm2UmXhJF8gpd3Il_2zhIGVXI9fPNfDpn4/exec";
 var S500={"DONG BAC":1,"DUYEN HAI":1,"HA NOI 1":1,"HA NOI 2":1,"TAY BAC":1,"MIEN TRUNG 1":1}; // chỉ áp dụng cho tháng trước T11: vùng tính mức 500K, còn lại 1 triệu. Từ T11 mọi vùng tính mức 1 triệu
 var OLDR=function(){var m=curMonth();return !!m&&m<"2026-11"};
 var is500=function(v){return OLDR()&&!!S500[v]};
