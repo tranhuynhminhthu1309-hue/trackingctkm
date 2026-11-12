@@ -570,7 +570,7 @@ function calc(){
   else W.push("Chưa có danh sách tủ đông Want Want: chưa tính chương trình tủ đông Want Want và Frozen thường chưa được loại khách hàng trùng.");
   if(dupFW)W.push("Có "+dupFW+" Customer Code nằm đồng thời trong Frozen thường (BC 7.2) và danh sách tủ đông Want Want: chỉ xét theo tủ đông Want Want (≥ "+thr.ww+" thùng), loại khỏi Frozen thường.");
   /* ---- 4. Shop Sữa ---- */
-  var shopEv=function(kh){var s=Math.round(Q(kh,"sua",CFG.km.shop)+1e-9),ty=TY(kh,CFG.km.shop);return{s:s,ty:ty,okS:s>=thr.shop-1e-9,okT:ty.length>=(thr.shopTypes||0)}};
+  var shopEv=function(kh){var s=Q(kh,"sua",CFG.km.shop),ty=TY(kh,CFG.km.shop);return{s:s,ty:ty,okS:s>=thr.shop-1e-9,okT:ty.length>=(thr.shopTypes||0)}};
   var shopTx=function(c){return"Sữa "+fx(c.s)+" thùng · "+c.ty.length+" loại"+(c.ty.length?" ("+c.ty.join(", ")+")":"")};
   var shopCond=function(){return"Sữa ≥ "+thr.shop+" thùng"+(thr.shopTypes?" và ≥ "+thr.shopTypes+" loại sữa (Opao, ADCA, STC, Yogurt, HTS)":"")};
   var okS=CFG.ok54.split(",").map(N).filter(Boolean);
@@ -591,7 +591,7 @@ function calc(){
   MODEL={rows:rows,W:W,ky:ky72,pl:pl,nhom:Object.keys(nhom).map(function(k){return nhom[k]}),dupFW:dupFW,has:{ww:!!WW,shop:!!L54},cfg:{thr:clone(CFG.thr),rw:clone(CFG.rw)},saved:false};
   $("#m3fk").hidden=false;
   $("#m3fk").innerHTML=pl.map(function(m){return'<option value="'+m+'"'+(m===PER?" selected":"")+'>Kỳ '+m+(m===ky72?" (BC 7.2)":"")+'</option>'}).join("")||'<option value="">Kỳ (không xác định)</option>';
-  fillF();renderCfg();$("#m3out").hidden=false;render();updSave()}
+  fillF();renderCfg();$("#m3out").hidden=false;render();updSave();if($("#upc")&&!$("#upc").hidden&&isMon(PER))doSave(true)}
 
 /* ---------- bộ lọc & hiển thị ---------- */
 function fillS(sel,all,vals,keep){var cur=keep?$(sel).value:"";$(sel).innerHTML='<option value="">'+all+'</option>'+uniq(vals).sort().map(function(x){return'<option value="'+E(x)+'">'+E(x)+'</option>'}).join("");if(cur&&vals.indexOf(cur)>=0)$(sel).value=cur}
@@ -730,11 +730,12 @@ function loadSaved(t,quiet,listOnly){$("#m3smsg").innerHTML='<span class="spin">
 $("#m3sv").onchange=function(){var t=this.value;if(!t)return;
   if(MODEL&&!MODEL.saved&&!confirm("Kết quả vừa tính chưa được lưu sẽ bị thay bằng kết quả đã lưu của kỳ "+t+". Tiếp tục?")){fillSaved("");return}
   loadSaved(t)};
-$("#m3sbtn").onclick=function(){if(!MODEL||MODEL.saved)return;
+function doSave(auto){if(!MODEL||MODEL.saved)return;
   if(!isMon(PER)){$("#m3smsg").textContent="Chưa xác định được kỳ báo cáo (cần cột Kỳ trong BC 7.2).";return}
-  if(SAVED.indexOf(PER)>=0&&!confirm("Kỳ "+PER+" đã có kết quả đã lưu. Lưu sẽ ghi đè riêng kỳ "+PER+" (các kỳ khác giữ nguyên). Tiếp tục?"))return;
+  if(!auto&&SAVED.indexOf(PER)>=0&&!confirm("Kỳ "+PER+" đã có kết quả đã lưu. Lưu sẽ ghi đè riêng kỳ "+PER+" (các kỳ khác giữ nguyên). Tiếp tục?"))return;
   var recs=recsOf(MODEL),T=PER,b=$("#m3sbtn");b.disabled=true;$("#m3smsg").innerHTML='<span class="spin"></span>Đang lưu '+fmt(recs.length-1)+' dòng...';
-  postAll("cttb",recs,T).then(function(){return loadSaved(T)}).then(function(){$("#m3smsg").textContent="Đã lưu kết quả kỳ "+T+". Mọi người mở link sẽ xem được."}).catch(function(e){var m=String(e.message);$("#m3smsg").textContent="Lưu thất bại: "+m+(/dataset/.test(m)?" (Apps Script cần được cập nhật bản mới có Module 3)":"")+". Bấm Lưu lại để thử lại."}).then(function(){b.disabled=false})};
+  postAll("cttb",recs,T).then(function(){return loadSaved(T)}).then(function(){$("#m3smsg").textContent=(auto?"Đã tự lưu":"Đã lưu")+" kết quả kỳ "+T+" lên Google Sheet. Mọi người mở link sẽ xem được."}).catch(function(e){var m=String(e.message);$("#m3smsg").textContent="Lưu thất bại: "+m+(/dataset/.test(m)?" (Apps Script cần được cập nhật bản mới có Module 3)":"")+". Bấm Lưu lại để thử lại."}).then(function(){b.disabled=false})}
+$("#m3sbtn").onclick=function(){doSave(false)};
 
 /* ---------- điều hướng giữa các màn hình ---------- */
 function showM3(on){document.body.classList.toggle("m3on",on);$("#m3").hidden=!on;
