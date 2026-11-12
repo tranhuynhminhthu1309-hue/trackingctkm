@@ -109,6 +109,7 @@ body.m3on #intro,body.m3on #sync,body.m3on #upc,body.m3on #warns,body.m3on #out{
 <div id="m3tabs4"></div>
 <section class="card"><h2>Chi tiết khách hàng</h2>
 <div class="bar"><div class="seg" id="m3pt"><button data-v="sua" class="on">Trưng bày Sữa</button><button data-v="fz">Frozen thường</button><button data-v="ww">Tủ đông Want Want</button><button data-v="shop">Shop Sữa</button></div></div>
+<div class="bar fb"><select id="m3dv" aria-label="Lọc vùng trong chi tiết"></select><select id="m3dn" aria-label="Lọc NPP trong chi tiết"></select></div>
 <div class="bar"><input id="m3q" type="search" placeholder="Tìm Customer Code hoặc tên khách hàng" aria-label="Tìm khách hàng"><div class="seg" id="m3kq"><button data-v="" class="on">Tất cả</button><button data-v="1">Đạt</button><button data-v="0">Không đạt</button></div><span class="sp"></span><span class="sub" id="m3cnt" style="margin:0"></span></div>
 <div class="tw"><table class="m3t" id="m3tb"></table></div>
 <p class="sub" style="margin:10px 0 0">Bấm vào tiêu đề cột Doanh số thực tế để sắp xếp. Bảng hiển thị tối đa 500 dòng đầu, dùng nút xuất Excel để lấy đủ danh sách.</p>
@@ -598,7 +599,8 @@ function fillS(sel,all,vals,keep){var cur=keep?$(sel).value:"";$(sel).innerHTML=
 function fillF(){var R=MODEL.rows,m=$("#m3fm").value;fillS("#m3fm","Tất cả miền",R.map(function(r){return r.mien}),1);m=$("#m3fm").value;
   var R2=R.filter(function(r){return!m||r.mien===m});fillS("#m3fv","Tất cả vùng",R2.map(function(r){return r.vung}),1);var v=$("#m3fv").value;
   var R3=R2.filter(function(r){return!v||r.vung===v}),ns={};R3.forEach(function(r){if(r.mp)ns[r.mp]=r.np});
-  var cur=$("#m3fn").value;$("#m3fn").innerHTML='<option value="">Tất cả NPP</option>'+Object.keys(ns).sort().map(function(k){return'<option value="'+E(k)+'">'+E(k+(ns[k]?" - "+ns[k]:""))+'</option>'}).join("");if(cur&&ns[cur]!=null)$("#m3fn").value=cur}
+  var cur=$("#m3fn").value;$("#m3fn").innerHTML='<option value="">Tất cả NPP</option>'+Object.keys(ns).sort().map(function(k){return'<option value="'+E(k)+'">'+E(k+(ns[k]?" - "+ns[k]:""))+'</option>'}).join("");if(cur&&ns[cur]!=null)$("#m3fn").value=cur;syncD()}
+function syncD(){["v","n"].forEach(function(k){var a=$("#m3f"+k),b=$("#m3d"+k);b.innerHTML=a.innerHTML;b.value=a.value})}
 function filt(noProg){var m=$("#m3fm").value,v=$("#m3fv").value,n=$("#m3fn").value,p=noProg?"":$("#m3fp").value;
   return MODEL.rows.filter(function(r){return(!m||r.mien===m)&&(!v||r.vung===v)&&(!n||r.mp===n)&&(!p||r.p===p)})}
 function summ(R){var A=R.filter(function(r){return!r.out}),o={};P.forEach(function(p){o[p]=A.filter(function(r){return r.p===p})});
@@ -641,7 +643,7 @@ $("#m3pt").onclick=function(e){var b=e.target.closest("button");if(b){TAB=b.data
 $("#m3kq").onclick=function(e){var b=e.target.closest("button");if(b){KQ=b.dataset.v;seg("#m3kq",KQ);renderDet()}};
 function seg(id,v){Array.prototype.forEach.call($(id).children,function(b){b.className=b.dataset.v===v?"on":""})}
 $("#m3q").oninput=function(){renderDet()};
-$("#m3fm").onchange=function(){fillF();render()};$("#m3fv").onchange=function(){fillF();render()};$("#m3fn").onchange=render;$("#m3fp").onchange=function(){var p=$("#m3fp").value;if(p){TAB=p;seg("#m3pt",TAB)}render()};
+$("#m3fm").onchange=function(){fillF();render()};$("#m3fv").onchange=function(){fillF();render()};$("#m3fn").onchange=function(){syncD();render()};$("#m3dv").onchange=function(){$("#m3fv").value=this.value;fillF();render()};$("#m3dn").onchange=function(){$("#m3fn").value=this.value;syncD();render()};$("#m3fp").onchange=function(){var p=$("#m3fp").value;if(p){TAB=p;seg("#m3pt",TAB)}render()};
 $("#m3fk").onchange=function(){PER=$("#m3fk").value;busy(function(){calc()})};
 $("#m3rs").onclick=function(){$("#m3fm").value="";$("#m3fv").value="";$("#m3fn").value="";$("#m3fp").value="";$("#m3q").value="";KQ="";seg("#m3kq","");fillF();render()};
 
