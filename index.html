@@ -570,7 +570,7 @@ function calc(){
   else W.push("Chưa có danh sách tủ đông Want Want: chưa tính chương trình tủ đông Want Want và Frozen thường chưa được loại khách hàng trùng.");
   if(dupFW)W.push("Có "+dupFW+" Customer Code nằm đồng thời trong Frozen thường (BC 7.2) và danh sách tủ đông Want Want: chỉ xét theo tủ đông Want Want (≥ "+thr.ww+" thùng), loại khỏi Frozen thường.");
   /* ---- 4. Shop Sữa ---- */
-  var shopEv=function(kh){var s=Q(kh,"sua",CFG.km.shop),ty=TY(kh,CFG.km.shop);return{s:s,ty:ty,okS:s>=thr.shop-1e-9,okT:ty.length>=(thr.shopTypes||0)}};
+  var shopEv=function(kh){var s=Math.round(Q(kh,"sua",CFG.km.shop)+1e-9),ty=TY(kh,CFG.km.shop);return{s:s,ty:ty,okS:s>=thr.shop-1e-9,okT:ty.length>=(thr.shopTypes||0)}};
   var shopTx=function(c){return"Sữa "+fx(c.s)+" thùng · "+c.ty.length+" loại"+(c.ty.length?" ("+c.ty.join(", ")+")":"")};
   var shopCond=function(){return"Sữa ≥ "+thr.shop+" thùng"+(thr.shopTypes?" và ≥ "+thr.shopTypes+" loại sữa (Opao, ADCA, STC, Yogurt, HTS)":"")};
   var okS=CFG.ok54.split(",").map(N).filter(Boolean);
