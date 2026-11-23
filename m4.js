@@ -105,16 +105,20 @@
   /* ====================== THÔNG BÁO CTKM ====================== */
   function tbRows() {
     var m = S.tbm, t = S.tbt, s = norm(S.tbq || "");
-    return S.data.tb.filter(function (r) { return (!m || r.month === m) && (!t || r.type === t) && (!s || norm(r.no + " " + r.name + " " + r.content).indexOf(s) >= 0); });
+    return S.data.tb.filter(function (r) { return (!m || r.month === m) && (!t || r.type === t) && (!S.tbr || regionHit(r.regions, S.tbr)) && (!s || norm(r.no + " " + r.name + " " + r.content).indexOf(s) >= 0); });
   }
+  var REG0 = ["Miền Bắc 1", "Miền Bắc 2", "Miền Trung", "Miền Đông", "TP HCM", "Miền Tây"];
+  function regList(v) { var s = String(v || "").trim(); return !s || norm(s) === "TOAN QUOC" ? [] : s.split(/\s*;\s*/).filter(Boolean); }
+  function regionHit(v, region) { var l = regList(v); return !l.length || l.some(function (x) { return norm(x) === norm(region); }); } // Toàn quốc thì miền nào cũng áp dụng
+  function tbRegions() { var all = REG0.slice(); S.data.tb.forEach(function (r) { regList(r.regions).forEach(function (x) { if (!all.some(function (y) { return norm(y) === norm(x); })) all.push(x); }); }); return all; }
   function vTb() {
     var d = S.data, ed = canEdit(), types = uniq(d.tb.map(function (r) { return r.type; })).sort();
     if (S.tbm === undefined) S.tbm = d.months.indexOf(S.month) >= 0 ? S.month : "";
     var h = '<p class="sub">Lưu và tra cứu thông báo chương trình khuyến mãi theo tháng. File PDF được lưu trên Google Drive, web chỉ lưu ID và đường dẫn (không nhân bản file).</p>' +
-      '<div class="bar fb"><select id="tbm" aria-label="Tháng">' + monthOpts(uniq(d.tb.map(function (r) { return r.month; })).sort().reverse(), S.tbm, "Tất cả tháng") + '</select><select id="tbt" aria-label="Hình thức KM">' + opts(types.map(function (x) { return [x, x]; }), S.tbt || "", "Mọi hình thức") + '</select>' +
+      '<div class="bar fb"><select id="tbm" aria-label="Tháng">' + monthOpts(uniq(d.tb.map(function (r) { return r.month; })).sort().reverse(), S.tbm, "Tất cả tháng") + '</select><select id="tbt" aria-label="Hình thức KM">' + opts(types.map(function (x) { return [x, x]; }), S.tbt || "", "Mọi hình thức") + '</select><select id="tbr" aria-label="Miền áp dụng">' + opts(tbRegions().map(function (x) { return [x, x]; }), S.tbr || "", "Mọi miền") + '</select>' +
       '<input id="tbq" type="search" placeholder="Tìm số thông báo, tên CTKM" value="' + E(S.tbq || "") + '" aria-label="Tìm kiếm"><span class="sp"></span><button data-a="tb-xl">⬇ Xuất Excel</button>' +
       (ed ? '<button class="p" data-a="tb-new">+ Thêm thông báo</button><button data-a="tb-drive">Thư mục Drive</button><button data-a="tb-recheck">Kiểm tra lại file</button>' : "") + "</div>";
-    var cols = [{ k: "month", h: "Tháng" }, { k: "no", h: "Số TB" }, { k: "name", h: "Tên CTKM", f: function (r) { return "<b>" + E(r.name) + "</b>" + (r.content ? '<div class="m">' + E(r.content) + "</div>" : ""); } }, { k: "type", h: "Hình thức" },
+    var cols = [{ k: "month", h: "Tháng" }, { k: "no", h: "Số TB" }, { k: "name", h: "Tên CTKM", f: function (r) { return "<b>" + E(r.name) + "</b>" + (r.content ? '<div class="m">' + E(r.content) + "</div>" : ""); } }, { k: "type", h: "Hình thức" }, { k: "regions", h: "Miền áp dụng", f: function (r) { return E(r.regions || "Toàn quốc"); } },
       { k: "from", h: "Bắt đầu", f: function (r) { return dmy(r.from); } }, { k: "to", h: "Kết thúc", f: function (r) { return dmy(r.to); } }, { k: "fstatus", h: "File", f: function (r) { return pill(r.fileId ? r.fstatus : ""); } }, { k: "updated", h: "Cập nhật", f: function (r) { return E((r.updated || "").slice(0, 10)); } }];
     return h + grid("tb", cols, tbRows(), function (r) {
       var a = r.fileId ? '<button class="p" data-a="tb-open" data-id="' + r.id + '">Mở thông báo</button><button data-a="tb-view" data-id="' + r.id + '">Xem</button><button data-a="tb-dl" data-id="' + r.id + '">Tải</button>' : "";
@@ -143,12 +147,20 @@
     }).catch(function (e) { if (w) w.close(); pdfFail(r, e); });
   }
   q("#m4px").onclick = function () { pdfd.close(); q("#m4if").src = "about:blank"; };
+  function regBoxes(v) {
+    var sel = regList(v), nat = !sel.length, all = tbRegions();
+    sel.forEach(function (x) { if (!all.some(function (y) { return norm(y) === norm(x); })) all.push(x); });
+    return '<label style="display:inline-block;margin-right:12px"><input type="checkbox" id="f-nat"' + (nat ? " checked" : "") + '> Toàn quốc</label>' + all.map(function (x, i) {
+      return '<label style="display:inline-block;margin-right:12px"><input type="checkbox" class="f-reg" value="' + E(x) + '"' + (sel.some(function (y) { return norm(y) === norm(x); }) ? " checked" : "") + '> ' + E(x) + "</label>"; }).join("");
+  }
+  function regPick() { var nat = q("#f-nat"); if (nat && nat.checked) return "Toàn quốc"; return [].slice.call(dlg.querySelectorAll(".f-reg:checked")).map(function (c) { return c.value; }).join("; ") || "Toàn quốc"; }
   function tbForm(r) {
     r = r || {}; var types = uniq(S.data.tb.map(function (x) { return x.type; }).concat(["Tặng hàng", "Chiết khấu", "Hỗ trợ khác"]));
     dlg.innerHTML = '<div class="bar"><h2 style="margin:0">' + (r.id ? "Sửa thông báo" : "Thêm thông báo CTKM") + '</h2><span class="sp"></span><button data-d="x">Đóng</button></div><div class="f">' +
       '<div><label>Tháng áp dụng</label><input type="month" id="f-month" value="' + E(r.month || S.month) + '"></div><div><label>Số thông báo</label><input id="f-no" value="' + E(r.no) + '"></div>' +
       '<div class="w2"><label>Tên CTKM</label><input id="f-name" value="' + E(r.name) + '"></div><div class="w2"><label>Nội dung cơ bản</label><textarea id="f-content" rows="3">' + E(r.content) + '</textarea></div>' +
       '<div><label>Hình thức KM</label><input id="f-type" list="f-types" value="' + E(r.type) + '"><datalist id="f-types">' + types.map(function (t) { return "<option>" + E(t) + "</option>"; }).join("") + '</datalist></div><div></div>' +
+      '<div class="w2"><label>Miền áp dụng</label><div id="f-regs">' + regBoxes(r.regions) + '</div></div>' +
       '<div><label>Bắt đầu</label><input type="date" id="f-from" value="' + E(r.from) + '"></div><div><label>Kết thúc</label><input type="date" id="f-to" value="' + E(r.to) + '"></div>' +
       '<div class="w2"><label>File PDF trên Google Drive: dán link hoặc ID</label><input id="f-file" value="' + E(r.fileId) + '" placeholder="https://drive.google.com/file/d/..."></div>' +
       '<div><label>Hoặc chọn từ thư mục Drive đã cấu hình</label><select id="f-pick"><option value="">— bấm “Tải danh sách” —</option></select><button type="button" data-d="list" style="margin-top:4px">Tải danh sách</button></div>' +
@@ -157,7 +169,7 @@
     dlg.dataset.id = r.id || ""; dlg.dataset.fname = r.fname || ""; dlg.showModal();
   }
   function tbSave() {
-    var row = { id: dlg.dataset.id, month: q("#f-month").value, no: q("#f-no").value, name: q("#f-name").value, content: q("#f-content").value, type: q("#f-type").value, from: q("#f-from").value, to: q("#f-to").value, fileId: q("#f-file").value, fname: dlg.dataset.fname };
+    var row = { id: dlg.dataset.id, month: q("#f-month").value, no: q("#f-no").value, name: q("#f-name").value, content: q("#f-content").value, type: q("#f-type").value, regions: regPick(), from: q("#f-from").value, to: q("#f-to").value, fileId: q("#f-file").value, fname: dlg.dataset.fname };
     q("#f-err").innerHTML = ""; q("#f-msg").innerHTML = '<span class="sp2"></span>Đang lưu...';
     post("tb.save", { row: row }).then(function (j) {
       if (!j.ok) { q("#f-msg").textContent = ""; q("#f-err").innerHTML = errList((j.errors || [{ msg: j.error }]).map(function (x) { return typeof x === "string" ? { msg: x } : x; })); return; }
@@ -190,6 +202,8 @@
   dlg.addEventListener("change", function (e) {
     if (e.target.id === "f-pick" && e.target.value) { q("#f-file").value = e.target.value; dlg.dataset.fname = e.target.selectedOptions[0].dataset.n || ""; }
     if (e.target.id === "f-up") tbUpload(e.target.files[0]);
+    if (e.target.id === "f-nat" && e.target.checked) [].forEach.call(dlg.querySelectorAll(".f-reg"), function (c) { c.checked = false; });
+    if (e.target.className === "f-reg" && e.target.checked) { var n = q("#f-nat"); if (n) n.checked = false; }
   });
 
   /* ====================== BẢNG GIÁ NPP ====================== */
@@ -338,7 +352,7 @@
   function rer(keep) { var el = q("#" + keep), pos = el.selectionStart; render(); var n = q("#" + keep); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } }
   sec.addEventListener("change", function (e) {
     var t = e.target, id = t.id;
-    if (id === "tbm") { S.tbm = t.value; S.page.tb = 0; render(); } else if (id === "tbt") { S.tbt = t.value; S.page.tb = 0; render(); }
+    if (id === "tbm") { S.tbm = t.value; S.page.tb = 0; render(); } else if (id === "tbt") { S.tbt = t.value; S.page.tb = 0; render(); } else if (id === "tbr") { S.tbr = t.value; S.page.tb = 0; render(); }
     else if (id === "gm") { S.month = t.value; S.page.gia = 0; render(); } else if (id === "gold") { S.old = t.checked; render(); }
     else if (id === "cm") { S.cm = t.value; S.page.cc = 0; render(); } else if (id === "ck") { S.ck = t.value; S.page.cc = 0; render(); } else if (id === "mc") { S.mc = t.value; S.page.map = 0; render(); }
   });
@@ -351,7 +365,7 @@
     else if (act === "tb-open") openPdf(find("tb", id), "tab"); else if (act === "tb-view") openPdf(find("tb", id), "view"); else if (act === "tb-dl") openPdf(find("tb", id), "dl");
     else if (act === "tb-del") { var r = find("tb", id); if (confirm("Xóa thông báo " + r.no + " - " + r.name + "?\nChỉ xóa thông tin trên web, file PDF trên Drive được giữ nguyên.")) post("tb.delete", { id: id }).then(function (j) { flash(j.ok ? "Đã xóa thông báo." : E(j.error), j.ok ? "" : "err"); load(); }); }
     else if (act === "tb-recheck") { busy("Đang kiểm tra các file trên Drive..."); post("tb.recheck", {}).then(function (j) { flash(j.ok ? "Đã kiểm tra " + j.total + " thông báo, " + j.changed + " thay đổi trạng thái file." : E(j.error), j.ok ? "" : "err"); load(); }); }
-    else if (act === "tb-xl") xl([["Thong bao CTKM", [["Tháng", "Số thông báo", "Tên CTKM", "Nội dung", "Hình thức", "Bắt đầu", "Kết thúc", "Link Drive", "Trạng thái file", "Cập nhật"]].concat(tbRows().map(function (r) { return [r.month, r.no, r.name, r.content, r.type, r.from, r.to, r.url, r.fstatus, r.updated]; }))]], "thong-bao-ctkm");
+    else if (act === "tb-xl") xl([["Thong bao CTKM", [["Tháng", "Số thông báo", "Tên CTKM", "Nội dung", "Hình thức", "Miền áp dụng", "Bắt đầu", "Kết thúc", "Link Drive", "Trạng thái file", "Cập nhật"]].concat(tbRows().map(function (r) { return [r.month, r.no, r.name, r.content, r.type, r.regions || "Toàn quốc", r.from, r.to, r.url, r.fstatus, r.updated]; }))]], "thong-bao-ctkm");
     else if (act === "g-imp") { S.impOpen = !S.impOpen; var gi = q("#gimp"); if (gi) gi.hidden = !S.impOpen; }
     else if (act === "g-edit") giaForm(find("gia", id));
     else if (act === "g-xl") xl([["Bang gia NPP", [["Tháng", "NPP", "SKU", "Tên sản phẩm", "Nhóm", "ĐVT", "Quy cách", "Giá thùng", "Giá lẻ", "Hiệu lực từ", "Hiệu lực đến", "Dùng cho CTTB", "Phiên bản", "Trạng thái"]].concat(giaRows().map(function (r) { return [r.month, r.npp, r.sku, r.name, r.group, r.unit, r.spec, r.priceCase, r.priceUnit, r.from, r.to, r.use, r.ver, r.status]; }))]], "bang-gia-npp-" + S.month);

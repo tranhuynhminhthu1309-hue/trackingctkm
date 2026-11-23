@@ -83,7 +83,7 @@
       var d = parseDateRange(it.name, month), unit = mech.unit ? mech.unit.toLowerCase() : "";
       rows.push({ line: it.line, month: month, code: it.code, kind: kind, name: it.name, group: it.group, buy: mech.buy, gift: mech.gift, unit: unit,
         factor: unit === "lốc" ? 4 : 1, from: d.from, to: d.to, prio: kind === "clear_date" ? 1 : 2, active: kind === "other" ? 0 : 1,
-        note: unit === "lốc" ? "1 lốc = 4 hộp (cần xác nhận)" : "" });
+        note: unit === "lốc" ? "1 lốc = 4 hộp" : "" });
     });
     return { rows: rows, skipped: skipped, errors: errors };
   }
