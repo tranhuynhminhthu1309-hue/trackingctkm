@@ -57,9 +57,14 @@
   function mechs() { return (S.cfg || []).filter(function (c) { return c.month === S.month && c.kind === S.kind && Number(c.active); }); }
   function progName(code) { var c = (S.cfg || []).filter(function (x) { return x.code === code && x.month === S.month; })[0]; return c ? c.name : ""; }
   function rule(c) { return c ? "Mua " + c.buy + " tặng " + c.gift + (c.unit ? " " + c.unit : "") + (Number(c.factor) > 1 ? " (1 " + c.unit + " = " + c.factor + " lẻ)" : "") : ""; }
+  function dsAll() { return (S.data ? S.data.agg : []).filter(function (r) { return r.lv === "ds"; }); }
+  function hasDs() { return dsAll().length > 0; }
+  function dsRows() { return dsAll().filter(function (r) { return (!S.f.mien || r.mien === S.f.mien) && (!S.f.vung || r.vung === S.f.vung); }); }
+  function dsGroups() { var m = {}; dsRows().forEach(function (r) { var a = m[r.code] = m[r.code] || { key: r.code, sales: 0, salesQty: 0 }; a.sales += r.sales; a.salesQty += r.salesQty; }); return Object.keys(m).map(function (k) { return m[k]; }); }
+  var pct = function (a, b) { return b > 0 ? (a / b * 100).toLocaleString("vi-VN", { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + "%" : "–"; };
   function filtering() { return !!(S.f.mien || S.f.vung || S.f.q); }
   function totals(rows) { var t = ZERO(); rows.forEach(function (r) { add(t, r); }); t.npp = group(rows.filter(function (r) { return r.giftQty > 0; }), function (r) { return r.key; }).length; return t; }
-  var METRICS = { amount: ["Giá trị (đ)", "Giá trị quà (đ)"], giftQty: ["SL quà", "SL quà (sản phẩm lẻ)"], orders: ["Số đơn", "Số đơn có quà"] };
+  var METRICS = { amount: ["Giá trị (đ)", "Giá trị hàng KM (đ)"], giftQty: ["SL hàng KM", "SL hàng KM (sản phẩm lẻ)"], orders: ["Số đơn", "Số đơn có hàng KM"] };
 
   /* ---------- Hiển thị ---------- */
   function render() {
@@ -89,15 +94,17 @@
   function dash(run) {
     var npp = rowsOf("npp", true), T = totals(npp), pgm = group(rowsOf("npp", true), function (r) { return r.code; }), h = '<p class="sub" style="margin:0 0 10px">' + runLine(run) + "</p>";
     var diff = T.giftQty - T.sysQty;
+    var dsr = dsRows(), sales = dsr.reduce(function (a, r) { return a + r.sales; }, 0), sqty = dsr.reduce(function (a, r) { return a + r.salesQty; }, 0), okDs = hasDs();
     h += '<div class="kpis">' +
-      kpi("Giá trị quà (đ)", nf(T.amount), "SL quà", nf(T.giftQty), "Số NPP", nf(T.npp)) +
-      kpi("Số đơn có quà", nf(T.orders), "Số suất", nf(T.suat), "Số chương trình có đơn", nf(pgm.filter(function (p) { return p.giftQty > 0; }).length) + "/" + nf(mechs().length || pgm.length)) +
-      '<div class="k"><h3>Đối chiếu số quà hệ thống</h3><div class="big">' + (diff === 0 && T.diffOrders === 0 ? '<span class="pill s0">Khớp 100%</span>' : '<span class="pill s1">Lệch ' + nf(Math.abs(diff)) + " SP</span>") + '</div><div class="row"><span>Hệ thống</span><b>' + nf(T.sysQty) + '</b></div><div class="row"><span>Đơn lệch</span><b>' + nf(T.diffOrders) + "</b></div></div></div>";
+      kpi("Doanh số tổng (đ)", okDs ? nf(sales) : "–", "SL bán (sản phẩm lẻ)", okDs ? nf(sqty) : "–", "Hàng KM / doanh số", okDs && !S.f.q ? pct(T.amount, sales) : "–") +
+      kpi("Giá trị hàng KM (đ)", nf(T.amount), "SL hàng KM", nf(T.giftQty), "Số NPP", nf(T.npp)) +
+      kpi("Số đơn có hàng KM", nf(T.orders), "Số suất", nf(T.suat), "Số chương trình có đơn", nf(pgm.filter(function (p) { return p.giftQty > 0; }).length) + "/" + nf(mechs().length || pgm.length)) +
+      '<div class="k"><h3>Đối chiếu số hàng KM hệ thống</h3><div class="big">' + (diff === 0 && T.diffOrders === 0 ? '<span class="pill s0">Khớp 100%</span>' : '<span class="pill s1">Lệch ' + nf(Math.abs(diff)) + " SP</span>") + '</div><div class="row"><span>Hệ thống</span><b>' + nf(T.sysQty) + '</b></div><div class="row"><span>Đơn lệch</span><b>' + nf(T.diffOrders) + "</b></div></div></div>";
     var warn = relevantWarn(run);
-    if (T.missQty > 0) h += '<div class="warn err"><b>Thiếu giá NPP:</b> ' + nf(T.missQty) + ' sản phẩm quà chưa có giá trị tiền (không lấy giá khác thay thế). <button class="lk" data-drill="" data-flag="nopr">Xem các đơn</button></div>';
+    if (T.missQty > 0) h += '<div class="warn err"><b>Thiếu giá NPP:</b> ' + nf(T.missQty) + ' sản phẩm hàng KM chưa có giá trị tiền (không lấy giá khác thay thế). <button class="lk" data-drill="" data-flag="nopr">Xem các đơn</button></div>';
     if (warn.length) h += '<details class="card" style="padding:8px 12px"><summary><b>Cảnh báo khi tính (' + warn.length + ')</b></summary><ul style="margin:6px 0;padding-left:18px">' + warn.map(function (w) { return '<li style="' + (w.level === "error" ? "color:var(--r)" : "") + '">' + E(w.msg) + "</li>"; }).join("") + "</ul></details>";
-    h += '<div class="two c2"><div class="card"><div class="bar" style="margin-bottom:6px"><b>' + E(METRICS[S.metric][1]) + " theo ngày</b><span class=\"sp\"></span>" + metricSeg() + "</div>" + dayChart() + "</div>" + shareCard(pgm) + "</div>";
-    h += '<div class="card"><div class="bar"><div class="seg" role="tablist">' + [["prog", "Theo chương trình"], ["vung", "Theo vùng"], ["npp", "Theo NPP"], ["day", "Theo ngày"]].map(function (v) { return '<button data-view="' + v[0] + '"' + (S.view === v[0] ? ' class="on"' : "") + ">" + v[1] + "</button>"; }).join("") + '</div><span class="sp"></span><span class="m">Bấm vào dòng để xem chi tiết từng đơn</span></div><div class="tw">' + table() + "</div></div>";
+    h += '<div class="two c2"><div class="card"><div class="bar" style="margin-bottom:6px"><b>' + E(METRICS[S.metric][1]) + " theo ngày</b><span class=\"sp\"></span>" + metricSeg() + "</div>" + dayChart() + "</div>" + shareCard() + "</div>";
+    h += '<div class="card"><div class="bar"><div class="seg" role="tablist">' + [["prog", "Theo chương trình"], ["ngh", "Theo nhóm hàng"], ["vung", "Theo vùng"], ["npp", "Theo NPP"], ["day", "Theo ngày"]].map(function (v) { return '<button data-view="' + v[0] + '"' + (S.view === v[0] ? ' class="on"' : "") + ">" + v[1] + "</button>"; }).join("") + '</div><span class="sp"></span><span class="m">' + (S.view === "ngh" ? "Doanh số toàn bộ hàng bán (trừ hàng trả), theo bộ lọc miền/vùng" : "Bấm vào dòng để xem chi tiết từng đơn") + '</span></div><div class="tw">' + table() + "</div></div>";
     return h + recon(npp) + history();
   }
   function kpi(t, big, l1, v1, l2, v2) { return '<div class="k"><h3>' + E(t) + '</h3><div class="big">' + big + '</div><div class="row"><span>' + E(l1) + "</span><b>" + v1 + '</b></div><div class="row"><span>' + E(l2) + "</span><b>" + v2 + "</b></div></div>"; }
@@ -113,17 +120,18 @@
     vals.forEach(function (v, j) { var hh = Math.max(v ? 2 : 0, v / mx * ch), x = L + j * bw + bw * 0.19; s += '<rect x="' + x.toFixed(1) + '" y="' + (H - B - hh).toFixed(1) + '" width="' + (bw * 0.62).toFixed(1) + '" height="' + hh.toFixed(1) + '" rx="2"><title>' + pad(j + 1) + "/" + p[1] + ": " + nf(v) + "</title></rect>"; if ((j + 1) % 5 === 0 || j === 0) s += '<text x="' + (L + j * bw + bw / 2).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + (j + 1) + "</text>"; });
     return s + "</svg>";
   }
-  function shareCard(pgm) {
-    var list = pgm.slice().sort(function (a, b) { return b[S.metric] - a[S.metric]; }).filter(function (x) { return x[S.metric] > 0; }), tot = list.reduce(function (s, x) { return s + x[S.metric]; }, 0), mx = list.length ? list[0][S.metric] : 0;
-    var h = '<div class="card"><b>Tỷ trọng theo chương trình</b><p class="m" style="margin:2px 0 8px">' + E(METRICS[S.metric][1]) + "</p>";
+  function shareCard() {
+    var list = dsGroups().filter(function (x) { return x.sales > 0; }).sort(function (x, y) { return y.sales - x.sales; }), tot = list.reduce(function (a, x) { return a + x.sales; }, 0), mx = list.length ? list[0].sales : 0;
+    var h = '<div class="card"><b>Tỷ trọng doanh số nhóm hàng</b><p class="m" style="margin:2px 0 8px">Doanh số (đ)' + (S.f.mien || S.f.vung ? " · " + E(S.f.vung || S.f.mien) : "") + "</p>";
+    if (!hasDs()) return h + '<div class="empty" style="padding:14px">Phiên bản này chưa có doanh số.' + (canEdit() ? " Hãy tính lại từ BC 5.1 và lưu." : " Vui lòng liên hệ Trade để cập nhật.") + "</div></div>";
     if (!list.length) return h + '<div class="empty" style="padding:14px">Chưa có dữ liệu.</div></div>';
-    list.slice(0, 8).forEach(function (x) { var w = Math.round(x[S.metric] / mx * 100); h += '<div style="display:grid;grid-template-columns:minmax(0,1fr) 62px;gap:8px;align-items:center;margin:5px 0;cursor:pointer" data-drill="' + E(x.key) + '" data-by="code"><div><div style="display:flex;justify-content:space-between;gap:8px"><span title="' + E(progName(x.key)) + '">' + E(x.key) + '</span><span class="m">' + nf(x[S.metric]) + '</span></div><div class="meter" style="margin:3px 0 0"><i style="width:' + w + '%;background:var(--acc)"></i></div></div><span class="m" style="text-align:right">' + (tot ? (x[S.metric] / tot * 100).toFixed(1) : 0) + "%</span></div>"; });
-    if (list.length > 8) h += '<p class="m" style="margin:6px 0 0">… và ' + (list.length - 8) + " chương trình khác (xem bảng bên dưới)</p>";
+    list.slice(0, 8).forEach(function (x) { var w = Math.round(x.sales / mx * 100); h += '<div style="display:grid;grid-template-columns:minmax(0,1fr) 62px;gap:8px;align-items:center;margin:5px 0"><div><div style="display:flex;justify-content:space-between;gap:8px"><span>' + E(x.key) + '</span><span class="m">' + nf(x.sales) + '</span></div><div class="meter" style="margin:3px 0 0"><i style="width:' + w + '%;background:var(--acc)"></i></div></div><span class="m" style="text-align:right">' + pct(x.sales, tot) + "</span></div>"; });
+    if (list.length > 8) h += '<p class="m" style="margin:6px 0 0">… và ' + (list.length - 8) + " nhóm hàng khác (xem tab “Theo nhóm hàng” bên dưới)</p>";
     return h + "</div>";
   }
   function sorted(rows, def) { var s = S.sort[S.view] || def; return rows.slice().sort(function (a, b) { var x = a[s.k], y = b[s.k]; if (typeof x === "string") return s.d * String(x).localeCompare(String(y), "vi"); return s.d * ((x || 0) - (y || 0)) || String(a.key).localeCompare(String(b.key)); }); }
   function th(k, t, num, cur) { return '<th class="' + (num ? "n" : "") + '" data-sort="' + k + '" title="Sắp xếp">' + E(t) + (cur && cur.k === k ? (cur.d < 0 ? " ▼" : " ▲") : "") + "</th>"; }
-  function bar(v, mx, key) { return '<div class="ib' + '" style="--w:' + (mx ? Math.round(v / mx * 100) : 0) + '%"><span>' + nf(v) + "</span></div>"; }
+  function bar(v, mx, key) { return '<div class="ib' + '" style="--w:' + (mx > 0 ? Math.max(0, Math.round(v / mx * 100)) : 0) + '%"><span>' + nf(v) + "</span></div>"; }
   function cell(r, k, mx) { return '<td class="n">' + (S.metric === k ? bar(r[k], mx) : nf(r[k])) + "</td>"; }
   function dcell(r) { var d = r.giftQty - r.sysQty; return '<td class="n">' + (d === 0 && !r.diffOrders ? '<span class="pill s0">Khớp</span>' : '<span class="pill s1">' + (d > 0 ? "+" : "") + nf(d) + "</span>") + "</td>"; }
   function table() {
@@ -134,15 +142,20 @@
       Object.keys(g).forEach(function (k) { if (!cfg.some(function (c) { return c.code === k; })) list.push(Object.assign({}, g[k], { c: null, name: "(không còn trong cấu hình)" })); });
       rows = filtering() ? list.filter(function (x) { return x.giftQty || x.orders; }) : list;
       rows = sorted(rows, { k: "key", d: 1 }); mx = Math.max.apply(null, rows.map(function (r) { return r[S.metric]; }).concat(0));
-      head = th("key", "Mã CTKM", false, cur) + '<th>Chương trình / cơ chế</th>' + th("orders", "Số đơn", true, cur) + th("suat", "Số suất", true, cur) + th("giftQty", "SL quà", true, cur) + th("amount", "Giá trị (đ)", true, cur) + th("sysQty", "Hệ thống", true, cur) + "<th class=\"n\">Chênh lệch</th>";
+      head = th("key", "Mã CTKM", false, cur) + '<th>Chương trình / cơ chế</th>' + th("orders", "Số đơn", true, cur) + th("suat", "Số suất", true, cur) + th("giftQty", "SL hàng KM", true, cur) + th("amount", "Giá trị (đ)", true, cur) + th("sysQty", "Hệ thống", true, cur) + "<th class=\"n\">Chênh lệch</th>";
       body = rows.map(function (r) { return '<tr data-drill="' + E(r.key) + '" data-by="code"' + (r.giftQty || r.orders ? "" : ' class="zero"') + "><td><b>" + E(r.key) + '</b></td><td class="t">' + E(r.name) + '<div class="m" style="margin:0">' + E(rule(r.c)) + (r.giftQty || r.orders ? "" : " · chưa phát sinh đơn") + "</div></td><td class=\"n\">" + nf(r.orders) + '</td><td class="n">' + nf(r.suat) + "</td>" + cell(r, "giftQty", mx) + cell(r, "amount", mx) + '<td class="n">' + nf(r.sysQty) + "</td>" + dcell(r) + "</tr>"; }).join("");
+    } else if (v === "ngh") {
+      if (!hasDs()) return '<div class="empty">Phiên bản này chưa có doanh số. Hãy tính lại từ BC 5.1 và lưu.</div>';
+      rows = sorted(dsGroups(), { k: "sales", d: -1 }); mx = Math.max.apply(null, rows.map(function (r) { return r.sales; }).concat(0)); var tt = rows.reduce(function (a, r) { return a + r.sales; }, 0);
+      head = th("key", "Nhóm hàng", false, cur) + th("salesQty", "SL bán (lẻ)", true, cur) + th("sales", "Doanh số (đ)", true, cur) + '<th class="n">% tỷ trọng</th>';
+      body = rows.map(function (r) { return "<tr><td><b>" + E(r.key) + '</b></td><td class="n">' + nf(r.salesQty) + '</td><td class="n">' + bar(r.sales, mx) + '</td><td class="n">' + pct(r.sales, tt) + "</td></tr>"; }).join("");
     } else {
       var lv = v === "day" ? "day" : "npp", keyFn = v === "vung" ? function (r) { return r.vung || "(chưa có vùng)"; } : v === "npp" ? function (r) { return r.key; } : function (r) { return r.key; };
       var init = v === "vung" ? function (r) { return { sub: r.mien }; } : v === "npp" ? function (r) { return { sub: r.vung, name: r.name }; } : null;
       rows = group(rowsOf(lv, v !== "day"), keyFn, init); rows = sorted(rows, v === "day" ? { k: "key", d: 1 } : { k: S.metric, d: -1 }); mx = Math.max.apply(null, rows.map(function (r) { return r[S.metric]; }).concat(0));
       var tot = rows.reduce(function (s, r) { return s + r.amount; }, 0), per = 25, pages = Math.max(1, Math.ceil(rows.length / per)); if (v !== "npp") per = rows.length || 1; if (S.page >= pages) S.page = 0;
       var view = v === "npp" ? rows.slice(S.page * per, S.page * per + per) : rows, lab = { vung: "Vùng", npp: "NPP", day: "Ngày" }[v];
-      head = th("key", lab, false, cur) + (v === "vung" ? '<th class="l">Miền</th>' : v === "npp" ? '<th class="l">Vùng</th>' : "") + th("orders", "Số đơn", true, cur) + th("suat", "Số suất", true, cur) + th("giftQty", "SL quà", true, cur) + th("amount", "Giá trị (đ)", true, cur) + '<th class="n">% giá trị</th><th class="n">Chênh lệch</th>';
+      head = th("key", lab, false, cur) + (v === "vung" ? '<th class="l">Miền</th>' : v === "npp" ? '<th class="l">Vùng</th>' : "") + th("orders", "Số đơn", true, cur) + th("suat", "Số suất", true, cur) + th("giftQty", "SL hàng KM", true, cur) + th("amount", "Giá trị (đ)", true, cur) + '<th class="n">% giá trị</th><th class="n">Chênh lệch</th>';
       body = view.map(function (r) { var dt = v === "day" ? r.key.slice(8) + "/" + r.key.slice(5, 7) : r.key; return '<tr data-drill="' + E(r.key) + '" data-by="' + v + '"><td>' + (v === "npp" ? "<b>" + E(r.name || r.key) + '</b><div class="m" style="margin:0">' + E(r.key) + "</div>" : "<b>" + E(dt) + "</b>") + "</td>" + (v === "vung" || v === "npp" ? '<td class="l">' + E(r.sub) + "</td>" : "") + '<td class="n">' + nf(r.orders) + '</td><td class="n">' + nf(r.suat) + "</td>" + cell(r, "giftQty", mx) + cell(r, "amount", mx) + '<td class="n">' + (tot ? (r.amount / tot * 100).toFixed(1) + "%" : "–") + "</td>" + dcell(r) + "</tr>"; }).join("");
       if (v === "npp" && pages > 1) body += '<tr><td colspan="9" style="text-align:center"><button data-page="-1"' + (S.page ? "" : " disabled") + '>‹ Trước</button> Trang ' + (S.page + 1) + "/" + pages + " · " + rows.length + ' NPP <button data-page="1"' + (S.page + 1 < pages ? "" : " disabled") + ">Sau ›</button></td></tr>";
     }
@@ -152,14 +165,14 @@
   function recon(npp) {
     var g = group(npp, function (r) { return r.code; }).filter(function (x) { return x.giftQty !== x.sysQty || x.diffOrders; });
     var h = '<details class="card" style="padding:8px 12px"' + (g.length ? " open" : "") + "><summary><b>Đối chiếu với số liệu hệ thống (BC 5.1)</b> " + (g.length ? '<span class="pill s1">' + g.length + " chương trình lệch</span>" : '<span class="pill s0">Khớp 100%</span>') + "</summary>";
-    h += '<p class="m" style="margin:6px 0">Số quà tính theo từng đơn so với số quà hệ thống đã tặng (Hàng KM trừ Hàng KM bị trả lại) cho cùng mã chương trình.</p>';
+    h += '<p class="m" style="margin:6px 0">Số hàng KM tính theo từng đơn so với số hàng KM hệ thống đã tặng (Hàng KM trừ Hàng KM bị trả lại) cho cùng mã chương trình.</p>';
     if (!g.length) return h + "</details>";
     return h + '<div class="tw"><table class="kt"><thead><tr><th>Mã CTKM</th><th class="n">SL tính được</th><th class="n">SL hệ thống</th><th class="n">Chênh lệch</th><th class="n">Đơn lệch</th></tr></thead><tbody>' + g.map(function (x) { return '<tr data-drill="' + E(x.key) + '" data-by="code" data-flag="diff"><td><b>' + E(x.key) + '</b></td><td class="n">' + nf(x.giftQty) + '</td><td class="n">' + nf(x.sysQty) + '</td><td class="n">' + nf(x.giftQty - x.sysQty) + '</td><td class="n">' + nf(x.diffOrders) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
   }
   function history() {
     var hs = S.data.history || []; if (hs.length < 1) return "";
-    return '<details class="card" style="padding:8px 12px"><summary><b>Lịch sử tính toán (' + hs.length + ' phiên bản)</b></summary><div class="tw"><table class="kt"><thead><tr><th>Phiên bản</th><th>Thời điểm</th><th>Người tính</th><th>File</th><th class="n">Đơn</th><th class="n">SL quà</th><th class="n">Giá trị (đ)</th><th>Trạng thái</th></tr></thead><tbody>' +
-      hs.map(function (x) { return "<tr><td>" + x.ver + "</td><td>" + E(x.at) + "</td><td>" + E(x.by) + "</td><td>" + E(x.file) + '</td><td class="n">' + nf(x.orders) + '</td><td class="n">' + nf(x.giftQty) + '</td><td class="n">' + nf(x.amount) + '</td><td><span class="pill ' + (x.status === "active" ? "s0" : "s1") + '">' + (x.status === "active" ? "Đang dùng" : "Đã thay thế") + "</span></td></tr>"; }).join("") + "</tbody></table></div></details>";
+    return '<details class="card" style="padding:8px 12px"><summary><b>Lịch sử tính toán (' + hs.length + ' phiên bản)</b></summary><div class="tw"><table class="kt"><thead><tr><th>Phiên bản</th><th>Thời điểm</th><th>Người tính</th><th>File</th><th class="n">Đơn</th><th class="n">SL hàng KM</th><th class="n">Giá trị (đ)</th><th class="n">Doanh số tổng (đ)</th><th>Trạng thái</th></tr></thead><tbody>' +
+      hs.map(function (x) { return "<tr><td>" + x.ver + "</td><td>" + E(x.at) + "</td><td>" + E(x.by) + "</td><td>" + E(x.file) + '</td><td class="n">' + nf(x.orders) + '</td><td class="n">' + nf(x.giftQty) + '</td><td class="n">' + nf(x.amount) + '</td><td class="n">' + (x.sales ? nf(x.sales) : "–") + '</td><td><span class="pill ' + (x.status === "active" ? "s0" : "s1") + '">' + (x.status === "active" ? "Đang dùng" : "Đã thay thế") + "</span></td></tr>"; }).join("") + "</tbody></table></div></details>";
   }
 
   /* ---------- Tính từ BC 5.1 (admin) ---------- */
@@ -172,9 +185,10 @@
     if (S.file) h += '<p class="m" style="margin:0 0 6px">File: <b>' + E(S.file.name) + "</b> · " + nf(S.file.lines.length) + " dòng dữ liệu" + (S.file.months ? " · " + E(S.file.months) : "") + "</p>";
     if (c) {
       var s = c.R.summary, old = S.data.run && S.data.run.month === c.month ? S.data.run : null;
-      h += '<div class="kpis" style="margin-top:8px">' + kpi("Kết quả vừa tính — " + c.month, nf(s.amount) + " đ", "SL quà", nf(s.giftQty), "Số đơn", nf(s.orders)) +
+      h += '<div class="kpis" style="margin-top:8px">' + kpi("Kết quả vừa tính — " + c.month, nf(s.amount) + " đ", "SL hàng KM", nf(s.giftQty), "Số đơn", nf(s.orders)) +
         '<div class="k"><h3>Đối chiếu hệ thống</h3><div class="big">' + (s.diffOrders === 0 && s.giftQty === s.sysQty ? '<span class="pill s0">Khớp 100%</span>' : '<span class="pill s1">Lệch ' + nf(s.diffOrders) + " đơn</span>") + '</div><div class="row"><span>SL hệ thống</span><b>' + nf(s.sysQty) + '</b></div><div class="row"><span>Đơn thiếu giá</span><b>' + nf(s.missOrders) + "</b></div></div>" +
-        (old ? kpi("So với phiên bản " + old.ver + " đang dùng", (s.amount - old.amount >= 0 ? "+" : "") + nf(s.amount - old.amount) + " đ", "SL quà", (s.giftQty - old.giftQty >= 0 ? "+" : "") + nf(s.giftQty - old.giftQty), "Đơn", (s.orders - old.orders >= 0 ? "+" : "") + nf(s.orders - old.orders)) : "") + "</div>";
+        kpi("Doanh số tổng — " + c.month, nf(s.sales) + " đ", "SL bán", nf(s.salesQty), "Nhóm hàng", nf(Object.keys(c.R.agg.filter(function (r) { return r.lv === "ds"; }).reduce(function (m, r) { m[r.code] = 1; return m; }, {})).length)) +
+        (old ? kpi("So với phiên bản " + old.ver + " đang dùng", (s.amount - old.amount >= 0 ? "+" : "") + nf(s.amount - old.amount) + " đ", "SL hàng KM", (s.giftQty - old.giftQty >= 0 ? "+" : "") + nf(s.giftQty - old.giftQty), "Đơn", (s.orders - old.orders >= 0 ? "+" : "") + nf(s.orders - old.orders)) : "") + "</div>";
       if (c.R.warnings.length) h += "<b>Cảnh báo (" + c.R.warnings.length + ")</b><ul>" + c.R.warnings.map(function (w) { return '<li class="' + w.level + '">' + E(w.msg) + "</li>"; }).join("") + "</ul>";
       h += '<div class="bar"><button class="p" id="kcsave"' + (S.busy ? " disabled" : "") + '>Lưu kết quả</button><button id="kccancel"' + (S.busy ? " disabled" : "") + '>Bỏ kết quả này</button><span class="m">' + nf(c.R.rows.length) + " dòng đơn · " + nf(c.R.agg.length) + " dòng tổng hợp</span></div>";
     }
@@ -226,25 +240,27 @@
   function flagPills(f) { var s = ""; if (/nopr/.test(f)) s += '<span class="pill s2">Thiếu giá</span> '; if (/pconf/.test(f)) s += '<span class="pill s1">Giá xung đột</span> '; if (/diff/.test(f)) s += '<span class="pill s1">Lệch hệ thống</span> '; if (/ret/.test(f)) s += '<span class="pill s0">Có trả hàng</span>'; return s; }
   function drawDrill() {
     var rows = DR.rows.filter(function (r) { return !DR.q || norm(r.order + " " + r.nppName + " " + r.khName + " " + r.kh + " " + r.npp).indexOf(norm(DR.q)) >= 0; }), t = rows.reduce(function (a, r) { a.q += r.giftQty; a.a += r.amount; a.s += r.suat; return a; }, { q: 0, a: 0, s: 0 });
-    dlg.innerHTML = '<div class="bar"><b>' + E(DR.title) + '</b><span class="m">' + nf(rows.length) + " đơn · " + nf(t.s) + " suất · " + nf(t.q) + " SL quà · " + nf(t.a) + ' đ</span><span class="sp"></span><input type="search" id="kdq" placeholder="Tìm số đơn, NPP, khách hàng…" value="' + E(DR.q) + '"><button id="kdx">⬇ Excel</button><button data-close>Đóng</button></div>' +
+    dlg.innerHTML = '<div class="bar"><b>' + E(DR.title) + '</b><span class="m">' + nf(rows.length) + " đơn · " + nf(t.s) + " suất · " + nf(t.q) + " SL hàng KM · " + nf(t.a) + ' đ</span><span class="sp"></span><input type="search" id="kdq" placeholder="Tìm số đơn, NPP, khách hàng…" value="' + E(DR.q) + '"><button id="kdx">⬇ Excel</button><button data-close>Đóng</button></div>' +
       (DR.truncated ? '<div class="warn">Chỉ hiển thị 3.000 đơn đầu trong tổng ' + nf(DR.total) + " đơn. Hãy lọc thêm theo vùng/NPP/ngày để xem hết.</div>" : "") +
-      '<div class="tw" style="max-height:60vh;overflow:auto"><table class="kt"><thead><tr><th>Số đơn hàng</th><th>CT</th><th>Ngày đặt</th><th>NPP</th><th>Vùng</th><th>Khách hàng</th><th class="n">SL mua đủ ĐK</th><th class="n">SL y/c</th><th class="n">Suất</th><th class="n">SL quà</th><th class="n">Hệ thống</th><th class="n">Giá lẻ</th><th class="n">Giá trị (đ)</th><th>Ghi chú</th></tr></thead><tbody>' +
+      '<div class="tw" style="max-height:60vh;overflow:auto"><table class="kt"><thead><tr><th>Số đơn hàng</th><th>CT</th><th>Ngày đặt</th><th>NPP</th><th>Vùng</th><th>Khách hàng</th><th class="n">SL mua đủ ĐK</th><th class="n">SL y/c</th><th class="n">Suất</th><th class="n">SL hàng KM</th><th class="n">Hệ thống</th><th class="n">Giá lẻ</th><th class="n">Giá trị (đ)</th><th>Ghi chú</th></tr></thead><tbody>' +
       (rows.length ? rows.slice(0, 500).map(function (r) { return "<tr><td>" + E(r.order) + "</td><td>" + E(r.code) + "</td><td>" + E(r.date.slice(8) + "/" + r.date.slice(5, 7)) + '</td><td class="t">' + E(r.nppName || r.npp) + "</td><td>" + E(r.vung) + '</td><td class="t">' + E(r.khName) + '<div class="m" style="margin:0">' + E(r.kh) + '</div></td><td class="n">' + nf(r.elig) + '</td><td class="n">' + nf(r.req) + '</td><td class="n">' + nf(r.suat) + '</td><td class="n">' + nf(r.giftQty) + '</td><td class="n">' + nf(r.sysQty) + '</td><td class="n">' + (r.price ? nf(Math.round(r.price * 100) / 100) : "–") + '</td><td class="n">' + nf(r.amount) + "</td><td>" + flagPills(r.flag) + "</td></tr>"; }).join("") : '<tr><td colspan="14" class="empty">Không có đơn nào.</td></tr>') + "</tbody></table></div>" + (rows.length > 500 ? '<p class="m">Đang hiển thị 500 đơn đầu; dùng ô tìm kiếm hoặc xuất Excel để xem đầy đủ.</p>' : "");
     var i = q("#kdq", dlg); if (i && document.activeElement !== i && DR.q) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
   }
 
   /* ---------- Xuất Excel ---------- */
   function exportView() {
-    var T = KINDS[S.kind].t + " " + S.month, sheets = [], rows = group(rowsOf("npp", true), function (r) { return r.code; }), A = [["Mã CTKM", "Chương trình", "Cơ chế", "Số đơn", "Số suất", "SL quà", "Giá trị (đ)", "SL hệ thống", "Chênh lệch"]];
+    var T = KINDS[S.kind].t + " " + S.month, sheets = [], rows = group(rowsOf("npp", true), function (r) { return r.code; }), A = [["Mã CTKM", "Chương trình", "Cơ chế", "Số đơn", "Số suất", "SL hàng KM", "Giá trị (đ)", "SL hệ thống", "Chênh lệch"]];
     var by = {}; rows.forEach(function (x) { by[x.key] = x; }); mechs().forEach(function (c) { var x = by[c.code] || ZERO(); A.push([c.code, c.name, rule(c), x.orders, x.suat, x.giftQty, x.amount, x.sysQty, x.giftQty - x.sysQty]); });
     sheets.push(["Theo chương trình", A]);
-    var V = [["Vùng", "Miền", "Số đơn", "Số suất", "SL quà", "Giá trị (đ)"]]; group(rowsOf("npp", true), function (r) { return r.vung; }, function (r) { return { mien: r.mien }; }).forEach(function (x) { V.push([x.key, x.mien, x.orders, x.suat, x.giftQty, x.amount]); }); sheets.push(["Theo vùng", V]);
-    var N = [["Mã NPP", "Tên NPP", "Vùng", "Số đơn", "Số suất", "SL quà", "Giá trị (đ)", "Chênh lệch"]]; group(rowsOf("npp", true), function (r) { return r.key; }, function (r) { return { name: r.name, vung: r.vung }; }).forEach(function (x) { N.push([x.key, x.name, x.vung, x.orders, x.suat, x.giftQty, x.amount, x.giftQty - x.sysQty]); }); sheets.push(["Theo NPP", N]);
-    var D = [["Ngày", "Số đơn", "Số suất", "SL quà", "Giá trị (đ)"]]; group(rowsOf("day"), function (r) { return r.key; }).sort(function (a, b) { return a.key < b.key ? -1 : 1; }).forEach(function (x) { D.push([x.key, x.orders, x.suat, x.giftQty, x.amount]); }); sheets.push(["Theo ngày", D]);
+    var V = [["Vùng", "Miền", "Số đơn", "Số suất", "SL hàng KM", "Giá trị (đ)"]]; group(rowsOf("npp", true), function (r) { return r.vung; }, function (r) { return { mien: r.mien }; }).forEach(function (x) { V.push([x.key, x.mien, x.orders, x.suat, x.giftQty, x.amount]); }); sheets.push(["Theo vùng", V]);
+    var N = [["Mã NPP", "Tên NPP", "Vùng", "Số đơn", "Số suất", "SL hàng KM", "Giá trị (đ)", "Chênh lệch"]]; group(rowsOf("npp", true), function (r) { return r.key; }, function (r) { return { name: r.name, vung: r.vung }; }).forEach(function (x) { N.push([x.key, x.name, x.vung, x.orders, x.suat, x.giftQty, x.amount, x.giftQty - x.sysQty]); }); sheets.push(["Theo NPP", N]);
+    var D = [["Ngày", "Số đơn", "Số suất", "SL hàng KM", "Giá trị (đ)"]]; group(rowsOf("day"), function (r) { return r.key; }).sort(function (a, b) { return a.key < b.key ? -1 : 1; }).forEach(function (x) { D.push([x.key, x.orders, x.suat, x.giftQty, x.amount]); }); sheets.push(["Theo ngày", D]);
+    var G = [["Nhóm hàng", "SL bán (lẻ)", "Doanh số (đ)", "% tỷ trọng"]], gs = dsGroups().sort(function (a, b) { return b.sales - a.sales; }), gt = gs.reduce(function (a, x) { return a + x.sales; }, 0);
+    gs.forEach(function (x) { G.push([x.key, x.salesQty, x.sales, gt > 0 ? Math.round(x.sales / gt * 10000) / 10000 : 0]); }); if (gs.length) { G.push(["Tổng", gs.reduce(function (a, x) { return a + x.salesQty; }, 0), gt, ""]); sheets.push(["Theo nhóm hàng", G]); }
     xl(sheets, T.replace(/\s+/g, "_"));
   }
   function exportDrill() {
-    var A = [["Số đơn hàng", "Mã CTKM", "Ngày đặt", "Mã NPP", "Tên NPP", "Vùng", "Miền", "Mã KH", "Tên KH", "SL mua đủ ĐK", "SL yêu cầu", "Số suất", "SL quà", "SL hệ thống", "SKU tính giá", "Giá lẻ", "Giá trị (đ)", "Cờ"]];
+    var A = [["Số đơn hàng", "Mã CTKM", "Ngày đặt", "Mã NPP", "Tên NPP", "Vùng", "Miền", "Mã KH", "Tên KH", "SL mua đủ ĐK", "SL yêu cầu", "Số suất", "SL hàng KM", "SL hệ thống", "SKU tính giá", "Giá lẻ", "Giá trị (đ)", "Cờ"]];
     DR.rows.forEach(function (r) { A.push([r.order, r.code, r.date, r.npp, r.nppName, r.vung, r.mien, r.kh, r.khName, r.elig, r.req, r.suat, r.giftQty, r.sysQty, r.priceSku, r.price, r.amount, r.flag]); }); xl([["Chi tiết đơn", A]], "Chi_tiet_don_" + S.month);
   }
 
