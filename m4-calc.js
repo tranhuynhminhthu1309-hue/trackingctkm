@@ -23,6 +23,8 @@
   }
 
   /* ---------- Đọc BC 5.1 ---------- */
+  /* Doanh số chỉ tính cho Frozen (Sản Phẩm Đông Lạnh), Sữa (Thức Uống Dinh Dưỡng) và Jelly (Thạch) theo cột "Ngành Hàng" của BC 5.1. Muốn thêm/bớt ngành thì sửa danh sách này. */
+  var DS_NGANH = { "SAN PHAM DONG LANH": 1, "THUC UONG DINH DUONG": 1, "THACH": 1 };
   var KIND = { "HANG BAN": "sale", "KH TRA HANG BAN": "ret", "HANG KM": "km", "KH TRA HANG KM": "kmret" };
   function parseBc51(aoa) {
     var hi = -1, h;
@@ -31,7 +33,7 @@
     h = aoa[hi].map(norm);
     var col = function (keys) { for (var k = 0; k < keys.length; k++) { var j = h.indexOf(keys[k]); if (j >= 0) return j; } return -1; };
     var c = { no: col(["SO DON HANG"]), orig: col(["SO DON HANG GOC"]), sku: col(["MA SAN PHAM"]), name: col(["TEN SAN PHAM"]), kind: col(["LOAI HANG"]), qty: col(["TONG SO LUONG LE"]), codes: col(["MA KHUYEN MAI"]),
-      date: col(["NGAY DAT HANG"]), grp: col(["NHOM HANG"]), amt: col(["DOANH SO"]), npp: col(["MA NPP"]), nppName: col(["TEN NPP"]), vung: col(["TEN VUNG"]), kh: col(["MA KH"]), khName: col(["TEN KH"]) };
+      date: col(["NGAY DAT HANG"]), grp: col(["NHOM HANG"]), ngh: col(["NGANH HANG"]), amt: col(["DOANH SO"]), npp: col(["MA NPP"]), nppName: col(["TEN NPP"]), vung: col(["TEN VUNG"]), kh: col(["MA KH"]), khName: col(["TEN KH"]) };
     var need = { no: "Số Đơn Hàng", sku: "Mã Sản Phẩm", kind: "Loại Hàng", qty: "Tổng Số Lượng Lẻ", codes: "Mã Khuyến Mãi", date: "Ngày Đặt Hàng", npp: "Mã NPP", vung: "Tên vùng" }, errors = [];
     Object.keys(need).forEach(function (k) { if (c[k] < 0) errors.push({ line: hi + 1, msg: "Thiếu cột \"" + need[k] + "\"." }); });
     if (errors.length) return { lines: [], errors: errors };
@@ -44,10 +46,11 @@
       var dt = isoDate(x[c.date]); if (!dt) badDate++;
       var codes = str(x[c.codes]).split(",").map(str).filter(Boolean);
       var am = c.amt >= 0 ? num(x[c.amt]) : 0;
-      lines.push({ line: r + 1, no: str(x[c.no]), amt: isNaN(am) ? 0 : am, grp: c.grp >= 0 ? str(x[c.grp]) : "", orig: c.orig >= 0 ? str(x[c.orig]) : "", sku: str(x[c.sku]), name: c.name >= 0 ? str(x[c.name]) : "", kind: kd, qty: q, codes: codes, date: dt,
+      lines.push({ line: r + 1, no: str(x[c.no]), amt: isNaN(am) ? 0 : am, grp: c.grp >= 0 ? str(x[c.grp]) : "", ngh: c.ngh >= 0 ? str(x[c.ngh]) : "", orig: c.orig >= 0 ? str(x[c.orig]) : "", sku: str(x[c.sku]), name: c.name >= 0 ? str(x[c.name]) : "", kind: kd, qty: q, codes: codes, date: dt,
         npp: str(x[c.npp]), nppName: c.nppName >= 0 ? str(x[c.nppName]) : "", vung: str(x[c.vung]), kh: c.kh >= 0 ? str(x[c.kh]) : "", khName: c.khName >= 0 ? str(x[c.khName]) : "" });
     }
     var w = [];
+    if (c.ngh < 0) w.push({ level: "warn", msg: "File thiếu cột \"Ngành Hàng\": doanh số đang tính cho tất cả ngành hàng, chưa lọc riêng Frozen / Sữa / Jelly." });
     if (!salesCols) w.push({ level: "warn", msg: "File thiếu cột \"Doanh Số\" hoặc \"Nhóm hàng\": chưa tính được doanh số tổng và tỷ trọng nhóm hàng." });
     if (badDate) w.push({ level: "warn", msg: badDate + " dòng không đọc được Ngày Đặt Hàng (các đơn đó bị loại khỏi tính)." });
     if (badQty) w.push({ level: "warn", msg: badQty + " dòng thiếu Tổng Số Lượng Lẻ, đã bỏ qua." });
@@ -141,16 +144,24 @@
     });
     var agg = Object.keys(A).sort().map(function (k) { return A[k]; }).concat(Object.keys(D).sort().map(function (k) { return D[k]; }));
 
-    // 3b) Doanh số tổng theo (NPP, nhóm hàng): Hàng Bán + KH Trả Hàng Bán (cột "Doanh Số"), tháng/NPP/vùng theo đơn gốc. Hàng KM và dòng chiết khấu nhóm không tính.
+    // 3b) Doanh số theo (NPP, nhóm hàng): chỉ ngành Frozen / Sữa / Jelly (DS_NGANH), Hàng Bán + KH Trả Hàng Bán (cột "Doanh Số"), tháng/NPP/vùng theo đơn gốc. Hàng KM và dòng chiết khấu nhóm không tính.
+    //     kind "all": toàn bộ đơn trong tháng (dùng cho CTKM Basic). kind "clear_date": chỉ các đơn có mã chương trình Cận date (dùng cho CTKM Cận date).
+    var hasNganh = lines.some(function (l) { return l.ngh; }), cdOrd = {};
+    lines.forEach(function (l) { var o = ordOf(l); if (l.codes.some(function (c) { return mechs[c] && mechs[c].kind === "clear_date"; })) cdOrd[o] = 1; });
     var DS = {}, dsOrd = {}, dsNoOrig = 0, dsOut = 0, dsNoDate = 0;
+    function dsAdd(kind, l, o, d, npp, nm, vg) {
+      var g = l.grp || "(Chưa có nhóm hàng)", k = kind + "\t" + npp + "\t" + g, a = DS[k];
+      if (!a) { var mien = regions[norm(vg)] || ""; if (!mien) unRegion[vg] = 1; a = DS[k] = { month: month, lv: "ds", code: g, kind: kind, key: npp, name: nm, vung: vg, mien: mien, orders: 0, suat: 0, giftQty: 0, amount: 0, sysQty: 0, missQty: 0, diffOrders: 0, sales: 0, salesQty: 0 }; }
+      a.sales += l.amt; a.salesQty += l.qty; if (l.kind === "sale" && !dsOrd[k + "\t" + o]) { dsOrd[k + "\t" + o] = 1; a.orders++; }
+    }
     lines.forEach(function (l) {
       if (l.kind !== "sale" && l.kind !== "ret") return;
+      if (hasNganh && !DS_NGANH[norm(l.ngh)]) return;
       var o = ordOf(l), mt = meta[o]; if (l.kind === "ret" && !mt) dsNoOrig++;
       var d = mt ? mt.date : l.date, npp = mt ? mt.npp : l.npp, nm = mt ? mt.nppName : l.nppName, vg = mt ? mt.vung : l.vung;
       if (!d) { dsNoDate++; return; } if (d.slice(0, 7) !== month) { dsOut++; return; }
-      var g = l.grp || "(Chưa có nhóm hàng)", k = npp + "\t" + g, a = DS[k];
-      if (!a) { var mien = regions[norm(vg)] || ""; if (!mien) unRegion[vg] = 1; a = DS[k] = { month: month, lv: "ds", code: g, kind: "all", key: npp, name: nm, vung: vg, mien: mien, orders: 0, suat: 0, giftQty: 0, amount: 0, sysQty: 0, missQty: 0, diffOrders: 0, sales: 0, salesQty: 0 }; }
-      a.sales += l.amt; a.salesQty += l.qty; if (l.kind === "sale" && !dsOrd[k + "\t" + o]) { dsOrd[k + "\t" + o] = 1; a.orders++; }
+      dsAdd("all", l, o, d, npp, nm, vg);
+      if (cdOrd[o]) dsAdd("clear_date", l, o, d, npp, nm, vg);
     });
     Object.keys(DS).forEach(function (k) { DS[k].sales = Math.round(DS[k].sales); DS[k].salesQty = Math.round(DS[k].salesQty); });
     var dsRows = Object.keys(DS).sort().map(function (k) { return DS[k]; }); agg = agg.concat(dsRows);
@@ -165,7 +176,7 @@
     if (skipDate) warnings.push({ level: "warn", msg: skipDate + " (đơn, chương trình) bị bỏ qua do không có Ngày đặt hàng." });
     var ur = Object.keys(unRegion); if (ur.length) warnings.push({ level: "warn", msg: "Vùng chưa có trong bảng Định biên nên chưa gán được Miền: " + ur.slice(0, 8).join(", ") + (ur.length > 8 ? "…" : "") + "." });
     var S = { orders: 0, suat: 0, giftQty: 0, amount: 0, sysQty: 0, diffOrders: 0, missOrders: 0, programs: order.length, sales: 0, salesQty: 0 };
-    dsRows.forEach(function (r) { S.sales += r.sales; S.salesQty += r.salesQty; });
+    dsRows.forEach(function (r) { if (r.kind === "all") { S.sales += r.sales; S.salesQty += r.salesQty; } });
     if (dsNoOrig) warnings.push({ level: "info", msg: dsNoOrig + " dòng trả hàng không tìm thấy đơn gốc trong file: doanh số trừ theo ngày của chính dòng trả hàng." });
     rows.forEach(function (r) { if (r.suat > 0) S.orders++; S.suat += r.suat; S.giftQty += r.giftQty; S.amount += r.amount; S.sysQty += r.sysQty; if (r.giftQty !== r.sysQty) S.diffOrders++; if (r.flag.indexOf("nopr") >= 0) S.missOrders++; });
     if (S.diffOrders) warnings.push({ level: "warn", msg: S.diffOrders + " (đơn, chương trình) có số hàng KM tính được khác số hàng KM hệ thống ghi nhận (xem cột Chênh lệch)." });
