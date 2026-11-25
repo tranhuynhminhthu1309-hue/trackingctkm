@@ -15,9 +15,9 @@
     { k: "tb", t: "Thông báo CTKM", kind: "m4", v: "m4tb" },
     { k: "gia", t: "Bảng giá NPP", kind: "m4", v: "m4gia" },
     { k: "ctkm", t: "CTKM", sub: [
-      { k: "basic", t: "CTKM Basic", kind: "ph" },
+      { k: "basic", t: "CTKM Basic", kind: "km", km: "basic" },
       { k: "ontop", t: "CTKM On top", kind: "old", tab: "CTKM" },
-      { k: "candate", t: "CTKM Cận date", kind: "ph" }] },
+      { k: "candate", t: "CTKM Cận date", kind: "km", km: "clear_date" }] },
     { k: "cttl", t: "CTTL", sub: [
       { k: "si", t: "Shop sỉ", kind: "old", tab: "CTTL", chip: "si" },
       { k: "sua", t: "Shop sữa", kind: "old", tab: "CTTL", chip: "sua" }] },
@@ -83,8 +83,10 @@
     if (it.kind === "data" && !canData()) { k = "dash"; s = ""; m = find(k); it = m; }
     CUR = { k: k, s: s || "" };
     ph.hidden = true; note.hidden = true; body("");
+    if (window.M4KM) window.M4KM.hide();
     legacyClick("old"); // luôn về trạng thái sạch trước: ẩn M3/M4, hiện màn cũ
     if (it.kind === "ph") { document.body.classList.add("m3on"); phPage(it.k === "dash" ? "dash" : it.k); }
+    else if (it.kind === "km") { if (window.M4KM) { document.body.classList.add("m3on"); window.M4KM.show(it.km); } else { document.body.classList.add("m3on"); phPage(it.k); } }
     else if (it.kind === "m4") legacyClick(it.v);
     else if (it.kind === "m3") { legacyClick("m3"); var f = q("#m3fp"); if (f) { f.value = it.prog; f.dispatchEvent(new Event("change", { bubbles: true })); } }
     else if (it.kind === "data") { body("m5data"); note.hidden = false; }
