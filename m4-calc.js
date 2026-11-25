@@ -25,6 +25,8 @@
   /* ---------- Đọc BC 5.1 ---------- */
   /* Doanh số chỉ tính cho Frozen (Sản Phẩm Đông Lạnh), Sữa (Thức Uống Dinh Dưỡng) và Jelly (Thạch) theo cột "Ngành Hàng" của BC 5.1. Muốn thêm/bớt ngành thì sửa danh sách này. */
   var DS_NGANH = { "SAN PHAM DONG LANH": 1, "THUC UONG DINH DUONG": 1, "THACH": 1 };
+  /* Lưu doanh số riêng của các đơn Cận date (dòng doanh số có loại "clear_date"). Chỉ bật khi backend Apps Script đã cho phép loại này; backend hiện tại chỉ nhận loại "all" nên đang để false. */
+  var STORE_CD_DS = false;
   var KIND = { "HANG BAN": "sale", "KH TRA HANG BAN": "ret", "HANG KM": "km", "KH TRA HANG KM": "kmret" };
   function parseBc51(aoa) {
     var hi = -1, h;
@@ -161,7 +163,7 @@
       var d = mt ? mt.date : l.date, npp = mt ? mt.npp : l.npp, nm = mt ? mt.nppName : l.nppName, vg = mt ? mt.vung : l.vung;
       if (!d) { dsNoDate++; return; } if (d.slice(0, 7) !== month) { dsOut++; return; }
       dsAdd("all", l, o, d, npp, nm, vg);
-      if (cdOrd[o]) dsAdd("clear_date", l, o, d, npp, nm, vg);
+      if (STORE_CD_DS && cdOrd[o]) dsAdd("clear_date", l, o, d, npp, nm, vg);
     });
     Object.keys(DS).forEach(function (k) { DS[k].sales = Math.round(DS[k].sales); DS[k].salesQty = Math.round(DS[k].salesQty); });
     var dsRows = Object.keys(DS).sort().map(function (k) { return DS[k]; }); agg = agg.concat(dsRows);
