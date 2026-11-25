@@ -92,7 +92,7 @@
       '<div><label for="kmq">Tìm</label><input id="kmq" type="search" placeholder="Mã CT, tên NPP, vùng…" value="' + E(S.f.q) + '"></div>' +
       '<div class="sp" style="flex:1"></div><button id="kmx">⬇ Xuất Excel</button></div>';
   }
-  function runLine(run) { return "Kết quả phiên bản " + run.ver + " · tính lúc " + E(run.at) + " bởi " + E(run.by) + " · file " + E(run.file || "(không rõ)") + (S.data.scoped ? " · chỉ hiển thị phạm vi của bạn" : ""); }
+  function runLine(run) { return "[giao diện 25/11-b] Kết quả phiên bản " + run.ver + " · tính lúc " + E(run.at) + " bởi " + E(run.by) + " · file " + E(run.file || "(không rõ)") + (S.data.scoped ? " · chỉ hiển thị phạm vi của bạn" : ""); }
   function dash(run) {
     var npp = rowsOf("npp", true), T = totals(npp), pgm = group(rowsOf("npp", true), function (r) { return r.code; }), h = '<p class="sub" style="margin:0 0 10px">' + runLine(run) + "</p>";
     var diff = T.giftQty - T.sysQty;
