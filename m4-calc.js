@@ -4,7 +4,7 @@
  *  - "Đủ điều kiện" = dòng Hàng Bán mang mã CTKM đó (cột Mã Khuyến Mãi) VÀ SKU nằm trong mapping (vai trò "mua") đang bật. SKU lạ không được đoán: báo cảnh báo.
  *  - Trả hàng (KH Trả Hàng Bán, SL âm): trừ vào đơn gốc (cột Số Đơn hàng Gốc).
  *  - Tháng, thời gian chương trình, giá: theo Ngày đặt hàng của đơn gốc. Giá theo NPP + SKU + ngày hiệu lực; thiếu giá -> cảnh báo, tiền = 0, KHÔNG lấy giá khác.
- *  - Đối chiếu với số lượng hàng KM hệ thống: dòng Hàng KM + KH Trả Hàng KM có mã chương trình đó. */
+ *  - SỐ HÀNG KM (giftQty) = tổng dòng "Hàng KM" theo (mã CTKM + mã sản phẩm), trừ "KH Trả Hàng KM" (mặc định opts.source="bc"). Công thức trên chỉ để đối chiếu, lưu ở trường sysQty. opts.source="formula": giữ cách cũ (giftQty = công thức). */
 (function (root) {
   "use strict";
   var str = function (v) { return v === null || v === undefined ? "" : String(v).replace(/_x[0-9a-fA-F]{4}_/g, " ").replace(/[\u0000-\u001f ]/g, " ").replace(/\s+/g, " ").trim(); };
@@ -77,7 +77,7 @@
   /* ---------- Tính ---------- */
   /** opts: {month, mechs:[cc rows], maps:[map rows], prices:[gia rows], regions:{vung->mien} (khóa đã norm)}; lines từ parseBc51. */
   function calc(lines, opts) {
-    var month = opts.month, warnings = [], mechs = {}, order = [];
+    var month = opts.month, warnings = [], mechs = {}, order = [], bcMode = opts.source !== "formula", giftPrice = {};
     (opts.mechs || []).forEach(function (m) {
       if (m.month !== month || !Number(m.active) || (m.kind !== "basic" && m.kind !== "clear_date")) return;
       var f = Number(m.factor) || 1, req = Number(m.buy) * f, gift = Number(m.gift) * f;
@@ -86,15 +86,18 @@
       order.push(m.code);
     });
     (opts.maps || []).forEach(function (r) { var m = mechs[r.code]; if (!m || !Number(r.active) || r.role !== "mua") return; (m.mua[r.sku] = m.mua[r.sku] || []).push({ priceSku: r.priceSku || r.sku, from: r.from || "", to: r.to || "" }); m.nMua++; });
+    (opts.maps || []).forEach(function (r) { if (Number(r.active) && r.priceSku && mechs[r.code]) giftPrice[r.code + "\t" + r.sku] = r.priceSku; }); // SKU tính giá khai báo trong Mapping (vd hàng tặng T1226KM tính theo SKU gốc)
     order.forEach(function (c) { if (!mechs[c].nMua) warnings.push({ level: "warn", msg: mechs[c].code + ": chưa có SKU 'mua' nào được bật trong Mapping, chương trình hiển thị 0 cho đến khi Admin xác nhận mapping." }); });
 
     // 1) Gom dòng theo đơn gốc. Đơn gốc = Số Đơn Hàng (dòng bán) hoặc Số Đơn hàng Gốc (dòng trả hàng).
-    var meta = {}, groups = {}, sys = {}, noOrig = 0, retNet = 0, unmapped = {}, outPeriod = {}, multi = 0, skipDate = 0, outMonth = 0;
+    var meta = {}, groups = {}, sys = {}, kmSku = {}, kmRet = {}, kmNoOrig = 0, kmNeg = 0, noOrig = 0, retNet = 0, unmapped = {}, outPeriod = {}, multi = 0, skipDate = 0, outMonth = 0;
     function ordOf(l) { return (l.kind === "ret" || l.kind === "kmret") && l.orig ? l.orig : l.no; }
     lines.forEach(function (l) { if ((l.kind === "sale" || l.kind === "km") && !meta[l.no]) meta[l.no] = { date: l.date, npp: l.npp, nppName: l.nppName, vung: l.vung, kh: l.kh, khName: l.khName }; });
     lines.forEach(function (l) {
       var o = ordOf(l), mt = meta[o];
-      if (l.kind === "km" || l.kind === "kmret") { l.codes.forEach(function (c) { if (mechs[c]) { var k = o + "\t" + c; sys[k] = (sys[k] || 0) + l.qty; } }); return; }
+      if (l.kind === "km" || l.kind === "kmret") {
+        if (l.kind === "kmret" && !mt) kmNoOrig++;
+        l.codes.forEach(function (c) { if (mechs[c]) { var k = o + "\t" + c, q = l.kind === "kmret" ? -Math.abs(l.qty) : l.qty; sys[k] = (sys[k] || 0) + q; var ks = kmSku[k] = kmSku[k] || {}; ks[l.sku] = (ks[l.sku] || 0) + q; if (l.kind === "kmret") kmRet[k] = 1; } }); return; } // hàng KM thực tế = mã CTKM + mã sản phẩm + loại hàng; KH Trả Hàng KM trừ lại (luôn là số trừ dù file ghi dấu nào)
       if (!mt) { if (l.kind === "ret") noOrig++; if (l.kind === "ret") return; }
       mt = mt || meta[l.no]; if (!mt) return;
       var cs = l.codes.filter(function (c) { return mechs[c]; });
@@ -122,18 +125,33 @@
       var g = groups[k], elig = 0, top = "", topQ = -1;
       if (g) Object.keys(g.elig).sort().forEach(function (s) { var q = g.elig[s]; elig += q; if (q > topQ) { topQ = q; top = s; } });
       var inPeriod = (!m.from || mt.date >= m.from) && (!m.to || mt.date <= m.to), suat = 0;
-      if (!inPeriod && g) { outPeriod[c] = (outPeriod[c] || 0) + 1; }
+      if (!inPeriod && g && !bcMode) { outPeriod[c] = (outPeriod[c] || 0) + 1; }
       if (inPeriod && elig >= m.req) suat = Math.floor(elig / m.req);
-      var giftQty = suat * m.giftPer, sq = sys[k] || 0;
-      if (!suat && !sq) return;
+      var giftQty = suat * m.giftPer, sq = sys[k] || 0, kmBySku = null;
+      if (bcMode) { // số hàng KM = đúng dòng Hàng KM của BC 5.1 theo (mã CTKM, mã sản phẩm), đã trừ KH Trả Hàng KM; công thức mua X tặng Y chỉ để đối chiếu
+        kmBySku = {}; sq = 0; var ks = kmSku[k] || {}, neg = false;
+        Object.keys(ks).sort().forEach(function (sk) { if (ks[sk] < 0) { neg = true; } if (ks[sk] > 0) { kmBySku[sk] = ks[sk]; sq += ks[sk]; } });
+        if (neg) kmNeg++;
+        var calcQty = giftQty; if (!sq && !calcQty) return;
+        suat = calcQty === sq ? suat : (sq > 0 ? Math.max(1, Math.round(sq / m.giftPer)) : 0); giftQty = sq; sq = calcQty;
+      }
+      if (!suat && !sq && !giftQty) return;
       var price = null, unit = 0, amount = 0, flag = [];
-      if (suat) {
+      if (bcMode) {
+        var skl = Object.keys(kmBySku);
+        skl.forEach(function (sk) {
+          var psku = giftPrice[c + "\t" + sk] || sk, pr = priceAt(opts.prices || [], mt.npp, psku, mt.date), q = kmBySku[sk];
+          if (!pr || !(Number(pr.price.priceUnit) > 0)) { if (flag.indexOf("nopr") < 0) flag.push("nopr"); noPrice[c + "\t" + psku] = (noPrice[c + "\t" + psku] || 0) + q; }
+          else { amount += Math.round(q * Number(pr.price.priceUnit)); if (pr.conflict && flag.indexOf("pconf") < 0) flag.push("pconf"); }
+        });
+        price = skl.map(function (sk) { return giftPrice[c + "\t" + sk] || sk; }).join("+"); unit = giftQty > 0 && amount > 0 ? Math.round(amount / giftQty * 100) / 100 : 0;
+      } else if (suat) {
         var rule = m.mua[top] && m.mua[top][0], psku = rule ? rule.priceSku : top, pr = priceAt(opts.prices || [], mt.npp, psku, mt.date);
         if (!pr) { flag.push("nopr"); noPrice[c + "\t" + psku] = (noPrice[c + "\t" + psku] || 0) + giftQty; }
         else { unit = Number(pr.price.priceUnit); if (!(unit > 0)) { flag.push("nopr"); noPrice[c + "\t" + psku] = (noPrice[c + "\t" + psku] || 0) + giftQty; unit = 0; } else amount = Math.round(giftQty * unit); if (pr.conflict) flag.push("pconf"); }
         price = psku;
       }
-      if (giftQty !== sq) flag.push("diff"); if (g && g.ret) flag.push("ret");
+      if (giftQty !== sq) flag.push("diff"); if (g && g.ret) flag.push("ret"); if (bcMode && kmRet[k]) flag.push("ret");
       var nk = norm(mt.vung), mien = regions[nk] || ""; if (!mien) unRegion[mt.vung] = 1;
       rows.push({ month: month, code: c, kind: m.kind, order: o, date: mt.date, npp: mt.npp, nppName: mt.nppName, vung: mt.vung, mien: mien, kh: mt.kh, khName: mt.khName, elig: elig, req: m.req, suat: suat, giftQty: giftQty, sysQty: sq, priceSku: price || "", price: unit, amount: amount, flag: flag.join(",") });
     });
@@ -174,6 +192,8 @@
     Object.keys(unmapped).sort().forEach(function (c) { var u = unmapped[c]; warnings.push({ level: "warn", msg: c + ": có " + u.qty + " sản phẩm bán mang mã chương trình nhưng SKU chưa có trong Mapping (" + Object.keys(u.skus).slice(0, 5).join(", ") + (Object.keys(u.skus).length > 5 ? "…" : "") + "). Số này CHƯA được tính, hãy bổ sung mapping." }); });
     Object.keys(noPrice).sort().forEach(function (k) { var p = k.split("\t"); warnings.push({ level: "warn", msg: p[0] + ": thiếu giá NPP cho SKU " + p[1] + " (" + noPrice[k] + " sản phẩm hàng KM chưa có giá trị tiền). Không dùng giá của SKU hoặc NPP khác." }); });
     Object.keys(outPeriod).sort().forEach(function (c) { warnings.push({ level: "info", msg: c + ": " + outPeriod[c] + " đơn có Ngày đặt hàng ngoài thời gian chương trình (" + mechs[c].from + " → " + mechs[c].to + "), không tính." }); });
+    if (bcMode && kmNoOrig) warnings.push({ level: "info", msg: kmNoOrig + " dòng KH Trả Hàng KM không tìm thấy đơn gốc trong file (đơn gốc ở kỳ khác), không trừ được." });
+    if (bcMode && kmNeg) warnings.push({ level: "info", msg: kmNeg + " (đơn, chương trình) có KH Trả Hàng KM lớn hơn Hàng KM của cùng sản phẩm trong file: phần âm không được trừ thêm (tính 0)." });
     if (noOrig) warnings.push({ level: "info", msg: noOrig + " dòng trả hàng không tìm thấy đơn gốc trong file (đơn gốc ở kỳ khác), không trừ được." });
     if (multi) warnings.push({ level: "info", msg: multi + " dòng thuộc nhiều chương trình Basic/Cận date cùng SKU: chỉ tính cho chương trình ưu tiên cao hơn." });
     if (outMonth) warnings.push({ level: "info", msg: outMonth + " (đơn, chương trình) có Ngày đặt hàng ngoài tháng " + month + ", không tính vào tháng này." });
@@ -183,10 +203,10 @@
     dsRows.forEach(function (r) { S.sales += r.sales; S.salesQty += r.salesQty; }); /* gồm cả dòng doanh số đơn Cận date (tiền tố CD|) để khớp bước kiểm tra tổng khi lưu */
     if (dsNoOrig) warnings.push({ level: "info", msg: dsNoOrig + " dòng trả hàng không tìm thấy đơn gốc trong file: doanh số trừ theo ngày của chính dòng trả hàng." });
     rows.forEach(function (r) { if (r.suat > 0) S.orders++; S.suat += r.suat; S.giftQty += r.giftQty; S.amount += r.amount; S.sysQty += r.sysQty; if (r.giftQty !== r.sysQty) S.diffOrders++; if (r.flag.indexOf("nopr") >= 0) S.missOrders++; });
-    if (S.diffOrders) warnings.push({ level: "warn", msg: S.diffOrders + " (đơn, chương trình) có số hàng KM tính được khác số hàng KM hệ thống ghi nhận (xem cột Chênh lệch)." });
+    if (S.diffOrders) warnings.push({ level: "warn", msg: S.diffOrders + " (đơn, chương trình) có số hàng KM theo BC 5.1 khác số tính theo công thức mua X tặng Y (xem cột Chênh lệch)." });
     return { rows: rows, agg: agg, summary: S, warnings: warnings, mechs: mechs, retNet: retNet };
   }
 
-  root.M4CALC = { ver: "26/11-f", parseBc51: parseBc51, calc: calc, priceAt: priceAt, isoDate: isoDate, norm: norm };
+  root.M4CALC = { ver: "26/11-g", parseBc51: parseBc51, calc: calc, priceAt: priceAt, isoDate: isoDate, norm: norm };
   if (typeof module !== "undefined" && module.exports) module.exports = root.M4CALC;
 })(typeof window !== "undefined" ? window : globalThis);
