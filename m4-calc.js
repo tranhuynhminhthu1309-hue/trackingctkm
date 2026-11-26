@@ -4,7 +4,7 @@
  *  - "Đủ điều kiện" = dòng Hàng Bán mang mã CTKM đó (cột Mã Khuyến Mãi) VÀ SKU nằm trong mapping (vai trò "mua") đang bật. SKU lạ không được đoán: báo cảnh báo.
  *  - Trả hàng (KH Trả Hàng Bán, SL âm): trừ vào đơn gốc (cột Số Đơn hàng Gốc).
  *  - Tháng, thời gian chương trình, giá: theo Ngày đặt hàng của đơn gốc. Giá theo NPP + SKU + ngày hiệu lực; thiếu giá -> cảnh báo, tiền = 0, KHÔNG lấy giá khác.
- *  - SỐ HÀNG KM (giftQty) = tổng dòng "Hàng KM" theo (mã CTKM + mã sản phẩm), trừ "KH Trả Hàng KM" (mặc định opts.source="bc"). Công thức trên chỉ để đối chiếu, lưu ở trường sysQty. opts.source="formula": giữ cách cũ (giftQty = công thức). */
+ *  - Đối chiếu với số lượng hàng KM hệ thống: dòng Hàng KM + KH Trả Hàng KM có mã chương trình đó. */
 (function (root) {
   "use strict";
   var str = function (v) { return v === null || v === undefined ? "" : String(v).replace(/_x[0-9a-fA-F]{4}_/g, " ").replace(/[\u0000-\u001f ]/g, " ").replace(/\s+/g, " ").trim(); };
@@ -77,27 +77,25 @@
   /* ---------- Tính ---------- */
   /** opts: {month, mechs:[cc rows], maps:[map rows], prices:[gia rows], regions:{vung->mien} (khóa đã norm)}; lines từ parseBc51. */
   function calc(lines, opts) {
-    var month = opts.month, warnings = [], mechs = {}, order = [], bcMode = opts.source !== "formula", giftPrice = {};
+    var month = opts.month, warnings = [], mechs = {}, order = [];
     (opts.mechs || []).forEach(function (m) {
       if (m.month !== month || !Number(m.active) || (m.kind !== "basic" && m.kind !== "clear_date")) return;
       var f = Number(m.factor) || 1, req = Number(m.buy) * f, gift = Number(m.gift) * f;
       if (!(req > 0) || !(gift > 0)) { warnings.push({ level: "error", msg: m.code + ": cơ chế mua " + m.buy + " tặng " + m.gift + " không hợp lệ, bỏ qua." }); return; }
-      mechs[m.code] = { code: m.code, kind: m.kind, name: m.name, group: m.group, buy: Number(m.buy), gift: Number(m.gift), unit: m.unit, factor: f, req: req, giftPer: gift, from: m.from || "", to: m.to || "", prio: Number(m.prio) || 9, mua: {}, nMua: 0 };
+      mechs[m.code] = { code: m.code, kind: m.kind, name: m.name, group: m.group, buy: Number(m.buy), gift: Number(m.gift), unit: m.unit, factor: f, req: req, giftPer: gift, from: m.from || "", to: m.to || "", prio: Number(m.prio) || 9, mua: {}, nMua: 0, tang: {} };
       order.push(m.code);
     });
-    (opts.maps || []).forEach(function (r) { var m = mechs[r.code]; if (!m || !Number(r.active) || r.role !== "mua") return; (m.mua[r.sku] = m.mua[r.sku] || []).push({ priceSku: r.priceSku || r.sku, from: r.from || "", to: r.to || "" }); m.nMua++; });
-    (opts.maps || []).forEach(function (r) { if (Number(r.active) && r.priceSku && mechs[r.code]) giftPrice[r.code + "\t" + r.sku] = r.priceSku; }); // SKU tính giá khai báo trong Mapping (vd hàng tặng T1226KM tính theo SKU gốc)
+    (opts.maps || []).forEach(function (r) { var m = mechs[r.code]; if (m && Number(r.active) && r.role === "tặng") { (m.tang[r.sku] = m.tang[r.sku] || []).push({ priceSku: r.priceSku || r.sku }); return; } if (!m || !Number(r.active) || r.role !== "mua") return; (m.mua[r.sku] = m.mua[r.sku] || []).push({ priceSku: r.priceSku || r.sku, from: r.from || "", to: r.to || "" }); m.nMua++; });
     order.forEach(function (c) { if (!mechs[c].nMua) warnings.push({ level: "warn", msg: mechs[c].code + ": chưa có SKU 'mua' nào được bật trong Mapping, chương trình hiển thị 0 cho đến khi Admin xác nhận mapping." }); });
 
     // 1) Gom dòng theo đơn gốc. Đơn gốc = Số Đơn Hàng (dòng bán) hoặc Số Đơn hàng Gốc (dòng trả hàng).
-    var meta = {}, groups = {}, sys = {}, kmSku = {}, kmRet = {}, kmNoOrig = 0, kmNeg = 0, noOrig = 0, retNet = 0, unmapped = {}, outPeriod = {}, multi = 0, skipDate = 0, outMonth = 0;
+    var meta = {}, groups = {}, sys = {}, sysS = {}, sysRet = {}, noOrigKm = 0, noOrig = 0, retNet = 0, unmapped = {}, outPeriod = {}, multi = 0, skipDate = 0, outMonth = 0;
     function ordOf(l) { return (l.kind === "ret" || l.kind === "kmret") && l.orig ? l.orig : l.no; }
     lines.forEach(function (l) { if ((l.kind === "sale" || l.kind === "km") && !meta[l.no]) meta[l.no] = { date: l.date, npp: l.npp, nppName: l.nppName, vung: l.vung, kh: l.kh, khName: l.khName }; });
+    lines.forEach(function (l) { if (l.kind === "kmret" && !meta[ordOf(l)]) { noOrigKm++; meta[ordOf(l)] = { date: l.date, npp: l.npp, nppName: l.nppName, vung: l.vung, kh: l.kh, khName: l.khName }; } }); // trả hàng KM không thấy đơn gốc: trừ theo ngày/NPP của chính dòng trả hàng
     lines.forEach(function (l) {
       var o = ordOf(l), mt = meta[o];
-      if (l.kind === "km" || l.kind === "kmret") {
-        if (l.kind === "kmret" && !mt) kmNoOrig++;
-        l.codes.forEach(function (c) { if (mechs[c]) { var k = o + "\t" + c, q = l.kind === "kmret" ? -Math.abs(l.qty) : l.qty; sys[k] = (sys[k] || 0) + q; var ks = kmSku[k] = kmSku[k] || {}; ks[l.sku] = (ks[l.sku] || 0) + q; if (l.kind === "kmret") kmRet[k] = 1; } }); return; } // hàng KM thực tế = mã CTKM + mã sản phẩm + loại hàng; KH Trả Hàng KM trừ lại (luôn là số trừ dù file ghi dấu nào)
+      if (l.kind === "km" || l.kind === "kmret") { l.codes.forEach(function (c) { if (mechs[c]) { var k = o + "\t" + c; sys[k] = (sys[k] || 0) + l.qty; (sysS[k] = sysS[k] || {})[l.sku] = (sysS[k][l.sku] || 0) + l.qty; if (l.kind === "kmret") sysRet[k] = 1; } }); return; }
       if (!mt) { if (l.kind === "ret") noOrig++; if (l.kind === "ret") return; }
       mt = mt || meta[l.no]; if (!mt) return;
       var cs = l.codes.filter(function (c) { return mechs[c]; });
@@ -116,7 +114,7 @@
     });
 
     // 2) Tính từng (đơn, chương trình)
-    var rows = [], miss = {}, regions = opts.regions || {}, unRegion = {}, noPrice = {};
+    var rows = [], miss = {}, regions = opts.regions || {}, unRegion = {}, noPrice = {}, kmOut = {}, ruleDiff = 0;
     var keys = {}; Object.keys(groups).forEach(function (k) { keys[k] = 1; }); Object.keys(sys).forEach(function (k) { keys[k] = 1; });
     Object.keys(keys).sort().forEach(function (k) {
       var p = k.split("\t"), o = p[0], c = p[1], m = mechs[c], mt = meta[o]; if (!mt) return;
@@ -125,40 +123,32 @@
       var g = groups[k], elig = 0, top = "", topQ = -1;
       if (g) Object.keys(g.elig).sort().forEach(function (s) { var q = g.elig[s]; elig += q; if (q > topQ) { topQ = q; top = s; } });
       var inPeriod = (!m.from || mt.date >= m.from) && (!m.to || mt.date <= m.to), suat = 0;
-      if (!inPeriod && g && !bcMode) { outPeriod[c] = (outPeriod[c] || 0) + 1; }
+      if (!inPeriod && g) { outPeriod[c] = (outPeriod[c] || 0) + 1; }
       if (inPeriod && elig >= m.req) suat = Math.floor(elig / m.req);
-      var giftQty = suat * m.giftPer, sq = sys[k] || 0, kmBySku = null;
-      if (bcMode) { // số hàng KM = đúng dòng Hàng KM của BC 5.1 theo (mã CTKM, mã sản phẩm), đã trừ KH Trả Hàng KM; công thức mua X tặng Y chỉ để đối chiếu
-        kmBySku = {}; sq = 0; var ks = kmSku[k] || {}, neg = false;
-        Object.keys(ks).sort().forEach(function (sk) { if (ks[sk] < 0) { neg = true; } if (ks[sk] > 0) { kmBySku[sk] = ks[sk]; sq += ks[sk]; } });
-        if (neg) kmNeg++;
-        var calcQty = giftQty; if (!sq && !calcQty) return;
-        suat = calcQty === sq ? suat : (sq > 0 ? Math.max(1, Math.round(sq / m.giftPer)) : 0); giftQty = sq; sq = calcQty;
-      }
-      if (!suat && !sq && !giftQty) return;
-      var price = null, unit = 0, amount = 0, flag = [];
-      if (bcMode) {
-        var skl = Object.keys(kmBySku);
-        skl.forEach(function (sk) {
-          var psku = giftPrice[c + "\t" + sk] || sk, pr = priceAt(opts.prices || [], mt.npp, psku, mt.date), q = kmBySku[sk];
-          if (!pr || !(Number(pr.price.priceUnit) > 0)) { if (flag.indexOf("nopr") < 0) flag.push("nopr"); noPrice[c + "\t" + psku] = (noPrice[c + "\t" + psku] || 0) + q; }
-          else { amount += Math.round(q * Number(pr.price.priceUnit)); if (pr.conflict && flag.indexOf("pconf") < 0) flag.push("pconf"); }
-        });
-        price = skl.map(function (sk) { return giftPrice[c + "\t" + sk] || sk; }).join("+"); unit = giftQty > 0 && amount > 0 ? Math.round(amount / giftQty * 100) / 100 : 0;
-      } else if (suat) {
-        var rule = m.mua[top] && m.mua[top][0], psku = rule ? rule.priceSku : top, pr = priceAt(opts.prices || [], mt.npp, psku, mt.date);
-        if (!pr) { flag.push("nopr"); noPrice[c + "\t" + psku] = (noPrice[c + "\t" + psku] || 0) + giftQty; }
-        else { unit = Number(pr.price.priceUnit); if (!(unit > 0)) { flag.push("nopr"); noPrice[c + "\t" + psku] = (noPrice[c + "\t" + psku] || 0) + giftQty; unit = 0; } else amount = Math.round(giftQty * unit); if (pr.conflict) flag.push("pconf"); }
-        price = psku;
-      }
-      if (giftQty !== sq) flag.push("diff"); if (g && g.ret) flag.push("ret"); if (bcMode && kmRet[k]) flag.push("ret");
+      var ruleQty = suat * m.giftPer, sq = sys[k] || 0;
+      if (!suat && !sq) return;
+      /* Hàng KM thực tế = Σ SL dòng "Hàng KM" − "KH Trả Hàng KM" theo (mã CTKM, mã sản phẩm); chỉ SKU có trong Mapping (vai trò tặng, hoặc mua nếu chương trình chưa khai báo SKU tặng). Giá trị = SL × giá NPP của từng SKU. */
+      var skq = sysS[k] || {}, giftRaw = 0, price = "", unit = 0, amount = 0, miss = 0, flag = [], topQ2 = -1;
+      Object.keys(skq).sort().forEach(function (sku) {
+        var q = skq[sku], rules = (m.tang[sku] && m.tang[sku].length ? m.tang[sku] : m.mua[sku]);
+        if (!rules || !rules.length) { var ko = kmOut[c] = kmOut[c] || {}; ko[sku] = (ko[sku] || 0) + q; return; }
+        giftRaw += q; var psku = rules[0].priceSku || sku, pr = priceAt(opts.prices || [], mt.npp, psku, mt.date), u = pr ? Number(pr.price.priceUnit) : 0;
+        if (Math.abs(q) > topQ2) { topQ2 = Math.abs(q); price = psku; }
+        if (!(u > 0)) { if (q > 0) { miss += q; flag.push("nopr"); noPrice[c + "\t" + psku] = (noPrice[c + "\t" + psku] || 0) + q; } }
+        else { amount += Math.round(q * u); if (pr.conflict) flag.push("pconf"); }
+      });
+      var giftQty = giftRaw > 0 ? giftRaw : 0; if (giftRaw < 0) flag.push("neg"); if (amount < 0) amount = 0; unit = giftQty ? Math.round(amount / giftQty) : 0;
+      flag = flag.filter(function (x, i) { return flag.indexOf(x) === i; });
+      if (ruleQty !== giftQty) { ruleDiff++; flag.push("rule"); }
+      if (sysRet[k]) flag.push("kmret");
+      if (giftQty !== sq) flag.push("diff"); if (g && g.ret) flag.push("ret");
       var nk = norm(mt.vung), mien = regions[nk] || ""; if (!mien) unRegion[mt.vung] = 1;
-      rows.push({ month: month, code: c, kind: m.kind, order: o, date: mt.date, npp: mt.npp, nppName: mt.nppName, vung: mt.vung, mien: mien, kh: mt.kh, khName: mt.khName, elig: elig, req: m.req, suat: suat, giftQty: giftQty, sysQty: sq, priceSku: price || "", price: unit, amount: amount, flag: flag.join(",") });
+      rows.push({ month: month, code: c, kind: m.kind, order: o, date: mt.date, npp: mt.npp, nppName: mt.nppName, vung: mt.vung, mien: mien, kh: mt.kh, khName: mt.khName, elig: elig, req: m.req, suat: suat, giftQty: giftQty, sysQty: sq, priceSku: price || "", price: unit, amount: amount, miss: miss, flag: flag.join(",") });
     });
 
     // 3) Tổng hợp theo (chương trình, NPP) và (chương trình, ngày, vùng)
     var A = {}, D = {};
-    function bump(t, key, base, r) { var a = t[key] = t[key] || Object.assign({ orders: 0, suat: 0, giftQty: 0, amount: 0, sysQty: 0, missQty: 0, diffOrders: 0, sales: 0, salesQty: 0 }, base); if (r.suat > 0) a.orders++; a.suat += r.suat; a.giftQty += r.giftQty; a.amount += r.amount; a.sysQty += r.sysQty; if (r.flag.indexOf("nopr") >= 0) a.missQty += r.giftQty; if (r.giftQty !== r.sysQty) a.diffOrders++; }
+    function bump(t, key, base, r) { var a = t[key] = t[key] || Object.assign({ orders: 0, suat: 0, giftQty: 0, amount: 0, sysQty: 0, missQty: 0, diffOrders: 0, sales: 0, salesQty: 0 }, base); if (r.giftQty > 0) a.orders++; a.suat += r.suat; a.giftQty += r.giftQty; a.amount += r.amount; a.sysQty += r.sysQty; a.missQty += r.miss || 0; if (r.giftQty !== r.sysQty) a.diffOrders++; }
     rows.forEach(function (r) {
       bump(A, r.code + "\t" + r.npp, { month: month, lv: "npp", code: r.code, kind: r.kind, key: r.npp, name: r.nppName, vung: r.vung, mien: r.mien }, r);
       bump(D, r.code + "\t" + r.date + "\t" + r.vung, { month: month, lv: "day", code: r.code, kind: r.kind, key: r.date, name: "", vung: r.vung, mien: r.mien }, r);
@@ -190,10 +180,10 @@
     // 4) Cảnh báo
     if (!(opts.prices || []).length) warnings.push({ level: "error", msg: "Chưa có Bảng giá NPP nào đang hiệu lực. Giá trị hàng KM = 0, hãy import bảng giá rồi tính lại." });
     Object.keys(unmapped).sort().forEach(function (c) { var u = unmapped[c]; warnings.push({ level: "warn", msg: c + ": có " + u.qty + " sản phẩm bán mang mã chương trình nhưng SKU chưa có trong Mapping (" + Object.keys(u.skus).slice(0, 5).join(", ") + (Object.keys(u.skus).length > 5 ? "…" : "") + "). Số này CHƯA được tính, hãy bổ sung mapping." }); });
+    Object.keys(kmOut).sort().forEach(function (c) { var ko = kmOut[c], tot = 0; Object.keys(ko).forEach(function (x) { tot += ko[x]; }); if (tot) warnings.push({ level: "warn", msg: c + ": có " + tot + " sản phẩm hàng KM của SKU chưa có trong Mapping (" + Object.keys(ko).slice(0, 5).join(", ") + (Object.keys(ko).length > 5 ? "…" : "") + "). Số này CHƯA tính vào SL hàng KM; thêm SKU với vai trò 'tặng' (SKU tính giá = SKU gốc nếu là SKU KM riêng)." }); });
     Object.keys(noPrice).sort().forEach(function (k) { var p = k.split("\t"); warnings.push({ level: "warn", msg: p[0] + ": thiếu giá NPP cho SKU " + p[1] + " (" + noPrice[k] + " sản phẩm hàng KM chưa có giá trị tiền). Không dùng giá của SKU hoặc NPP khác." }); });
     Object.keys(outPeriod).sort().forEach(function (c) { warnings.push({ level: "info", msg: c + ": " + outPeriod[c] + " đơn có Ngày đặt hàng ngoài thời gian chương trình (" + mechs[c].from + " → " + mechs[c].to + "), không tính." }); });
-    if (bcMode && kmNoOrig) warnings.push({ level: "info", msg: kmNoOrig + " dòng KH Trả Hàng KM không tìm thấy đơn gốc trong file (đơn gốc ở kỳ khác), không trừ được." });
-    if (bcMode && kmNeg) warnings.push({ level: "info", msg: kmNeg + " (đơn, chương trình) có KH Trả Hàng KM lớn hơn Hàng KM của cùng sản phẩm trong file: phần âm không được trừ thêm (tính 0)." });
+    if (noOrigKm) warnings.push({ level: "info", msg: noOrigKm + " dòng KH Trả Hàng KM không tìm thấy đơn gốc trong file: vẫn trừ hàng KM, theo ngày và NPP của chính dòng trả hàng." });
     if (noOrig) warnings.push({ level: "info", msg: noOrig + " dòng trả hàng không tìm thấy đơn gốc trong file (đơn gốc ở kỳ khác), không trừ được." });
     if (multi) warnings.push({ level: "info", msg: multi + " dòng thuộc nhiều chương trình Basic/Cận date cùng SKU: chỉ tính cho chương trình ưu tiên cao hơn." });
     if (outMonth) warnings.push({ level: "info", msg: outMonth + " (đơn, chương trình) có Ngày đặt hàng ngoài tháng " + month + ", không tính vào tháng này." });
@@ -202,8 +192,9 @@
     var S = { orders: 0, suat: 0, giftQty: 0, amount: 0, sysQty: 0, diffOrders: 0, missOrders: 0, programs: order.length, sales: 0, salesQty: 0 };
     dsRows.forEach(function (r) { S.sales += r.sales; S.salesQty += r.salesQty; }); /* gồm cả dòng doanh số đơn Cận date (tiền tố CD|) để khớp bước kiểm tra tổng khi lưu */
     if (dsNoOrig) warnings.push({ level: "info", msg: dsNoOrig + " dòng trả hàng không tìm thấy đơn gốc trong file: doanh số trừ theo ngày của chính dòng trả hàng." });
-    rows.forEach(function (r) { if (r.suat > 0) S.orders++; S.suat += r.suat; S.giftQty += r.giftQty; S.amount += r.amount; S.sysQty += r.sysQty; if (r.giftQty !== r.sysQty) S.diffOrders++; if (r.flag.indexOf("nopr") >= 0) S.missOrders++; });
-    if (S.diffOrders) warnings.push({ level: "warn", msg: S.diffOrders + " (đơn, chương trình) có số hàng KM theo BC 5.1 khác số tính theo công thức mua X tặng Y (xem cột Chênh lệch)." });
+    rows.forEach(function (r) { if (r.giftQty > 0) S.orders++; S.suat += r.suat; S.giftQty += r.giftQty; S.amount += r.amount; S.sysQty += r.sysQty; if (r.giftQty !== r.sysQty) S.diffOrders++; if (r.flag.indexOf("nopr") >= 0) S.missOrders++; });
+    if (S.diffOrders) warnings.push({ level: "warn", msg: S.diffOrders + " (đơn, chương trình) có SL hàng KM theo Mapping khác tổng hàng KM trong BC 5.1 (SKU hàng KM chưa có trong Mapping, xem cảnh báo SKU)." });
+    if (ruleDiff) warnings.push({ level: "info", msg: ruleDiff + " (đơn, chương trình) có hàng KM thực tế khác số suất × SL tặng theo cơ chế (Mua X tặng Y). SL hàng KM vẫn lấy theo thực tế trên BC 5.1." });
     return { rows: rows, agg: agg, summary: S, warnings: warnings, mechs: mechs, retNet: retNet };
   }
 

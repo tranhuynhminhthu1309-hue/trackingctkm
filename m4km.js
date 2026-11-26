@@ -9,7 +9,7 @@
   var nf = function (n) { return Number(n || 0).toLocaleString("vi-VN"); }, pad = function (n) { return (n < 10 ? "0" : "") + n; };
   var norm = K.norm, pin = function () { var p = q("#pin"); return p ? p.value : ""; };
   var KINDS = {
-    basic: { t: "CTKM Basic", d: "Số hàng KM lấy từ BC 5.1: mã CTKM + mã sản phẩm + loại hàng “Hàng KM”, trừ “KH Trả Hàng KM”. Công thức mua đủ → tặng (FLOOR(SL mua đủ ĐK ÷ SL yêu cầu) × SL tặng, tính riêng từng đơn) dùng để đối chiếu." },
+    basic: { t: "CTKM Basic", d: "Mua đủ số lượng cùng loại trong 1 đơn hàng thì được tặng thêm. Tính riêng từng đơn: FLOOR(SL mua đủ điều kiện ÷ SL yêu cầu) × SL tặng, không cộng dồn giữa các đơn." },
     clear_date: { t: "CTKM Cận date", d: "Chương trình xả hàng cận date của NPP (Jelly, HTS). Tính riêng từng đơn như Basic; chương trình chưa phát sinh đơn hiển thị 0." }
   };
   var S = { kind: "basic", month: "", data: null, cfg: null, loadedPin: null, view: "prog", metric: "amount", f: { mien: "", vung: "", q: "" }, sort: {}, page: 0, calc: null, file: null, busy: "", flash: null, err: "" };
@@ -103,7 +103,7 @@
       kpi(S.kind === "clear_date" ? "Doanh số đơn Cận date (đ)" : "Doanh số tổng (đ)", okDs ? nf(sales) : "–", "SL bán (sản phẩm lẻ)", okDs ? nf(sqty) : "–", "Hàng KM / doanh số", okDs && !S.f.q ? pct(T.amount, sales) : "–") +
       kpi("Giá trị hàng KM (đ)", nf(T.amount), "SL hàng KM", nf(T.giftQty), "Số NPP", nf(T.npp)) +
       kpi("Số đơn có hàng KM", nf(T.orders), "Số suất", nf(T.suat), "Số chương trình có đơn", nf(pgm.filter(function (p) { return p.giftQty > 0; }).length) + "/" + nf(mechs().length || pgm.length)) +
-      '<div class="k"><h3>Đối chiếu công thức mua X tặng Y</h3><div class="big">' + (diff === 0 && T.diffOrders === 0 ? '<span class="pill s0">Khớp 100%</span>' : '<span class="pill s1">Lệch ' + nf(Math.abs(diff)) + " SP</span>") + '</div><div class="row"><span>Theo công thức</span><b>' + nf(T.sysQty) + '</b></div><div class="row"><span>Đơn lệch</span><b>' + nf(T.diffOrders) + "</b></div></div></div>";
+      '<div class="k"><h3>Đối chiếu số hàng KM hệ thống</h3><div class="big">' + (diff === 0 && T.diffOrders === 0 ? '<span class="pill s0">Khớp 100%</span>' : '<span class="pill s1">Lệch ' + nf(Math.abs(diff)) + " SP</span>") + '</div><div class="row"><span>Hệ thống</span><b>' + nf(T.sysQty) + '</b></div><div class="row"><span>Đơn lệch</span><b>' + nf(T.diffOrders) + "</b></div></div></div>";
     var warn = relevantWarn(run);
     if (T.missQty > 0) h += '<div class="warn err"><b>Thiếu giá NPP:</b> ' + nf(T.missQty) + ' sản phẩm hàng KM chưa có giá trị tiền (không lấy giá khác thay thế). <button class="lk" data-drill="" data-flag="nopr">Xem các đơn</button></div>';
     if (warn.length) h += '<details class="card" style="padding:8px 12px"><summary><b>Cảnh báo khi tính (' + warn.length + ')</b></summary><ul style="margin:6px 0;padding-left:18px">' + warn.map(function (w) { return '<li style="' + (w.level === "error" ? "color:var(--r)" : "") + '">' + E(w.msg) + "</li>"; }).join("") + "</ul></details>";
@@ -146,7 +146,7 @@
       Object.keys(g).forEach(function (k) { if (!cfg.some(function (c) { return c.code === k; })) list.push(Object.assign({}, g[k], { c: null, name: "(không còn trong cấu hình)" })); });
       rows = filtering() ? list.filter(function (x) { return x.giftQty || x.orders; }) : list;
       rows = sorted(rows, { k: "key", d: 1 }); mx = Math.max.apply(null, rows.map(function (r) { return r[S.metric]; }).concat(0));
-      head = th("key", "Mã CTKM", false, cur) + '<th>Chương trình / cơ chế</th>' + th("orders", "Số đơn", true, cur) + th("suat", "Số suất", true, cur) + th("giftQty", "SL hàng KM", true, cur) + th("amount", "Giá trị (đ)", true, cur) + th("sysQty", "Theo công thức", true, cur) + "<th class=\"n\">Chênh lệch</th>";
+      head = th("key", "Mã CTKM", false, cur) + '<th>Chương trình / cơ chế</th>' + th("orders", "Số đơn", true, cur) + th("suat", "Số suất", true, cur) + th("giftQty", "SL hàng KM", true, cur) + th("amount", "Giá trị (đ)", true, cur) + th("sysQty", "Hệ thống", true, cur) + "<th class=\"n\">Chênh lệch</th>";
       body = rows.map(function (r) { return '<tr data-drill="' + E(r.key) + '" data-by="code"' + (r.giftQty || r.orders ? "" : ' class="zero"') + "><td><b>" + E(r.key) + '</b></td><td class="t">' + E(r.name) + '<div class="m" style="margin:0">' + E(rule(r.c)) + (r.giftQty || r.orders ? "" : " · chưa phát sinh đơn") + "</div></td><td class=\"n\">" + nf(r.orders) + '</td><td class="n">' + nf(r.suat) + "</td>" + cell(r, "giftQty", mx) + cell(r, "amount", mx) + '<td class="n">' + nf(r.sysQty) + "</td>" + dcell(r) + "</tr>"; }).join("");
     } else if (v === "ngh") {
       if (!hasDs()) return '<div class="empty">Phiên bản này chưa có doanh số. Hãy tính lại từ BC 5.1 và lưu.</div>';
@@ -168,10 +168,10 @@
   }
   function recon(npp) {
     var g = group(npp, function (r) { return r.code; }).filter(function (x) { return x.giftQty !== x.sysQty || x.diffOrders; });
-    var h = '<details class="card" style="padding:8px 12px"' + (g.length ? " open" : "") + "><summary><b>Đối chiếu hàng KM BC 5.1 với công thức mua X tặng Y</b> " + (g.length ? '<span class="pill s1">' + g.length + " chương trình lệch</span>" : '<span class="pill s0">Khớp 100%</span>') + "</summary>";
-    h += '<p class="m" style="margin:6px 0">Số hàng KM lấy từ BC 5.1 theo mã CTKM + mã sản phẩm + loại hàng “Hàng KM”, trừ “KH Trả Hàng KM”. Cột so sánh là số tính theo công thức mua X tặng Y từ hàng bán trong đơn; chênh lệch thường do mapping SKU chưa đủ, đơn trả hàng, hoặc hệ thống tặng khác điều kiện.</p>';
+    var h = '<details class="card" style="padding:8px 12px"' + (g.length ? " open" : "") + "><summary><b>Đối chiếu với số liệu hệ thống (BC 5.1)</b> " + (g.length ? '<span class="pill s1">' + g.length + " chương trình lệch</span>" : '<span class="pill s0">Khớp 100%</span>') + "</summary>";
+    h += '<p class="m" style="margin:6px 0">Số hàng KM tính theo từng đơn so với số hàng KM hệ thống đã tặng (Hàng KM trừ Hàng KM bị trả lại) cho cùng mã chương trình.</p>';
     if (!g.length) return h + "</details>";
-    return h + '<div class="tw"><table class="kt"><thead><tr><th>Mã CTKM</th><th class="n">SL hàng KM (BC 5.1)</th><th class="n">SL theo công thức</th><th class="n">Chênh lệch</th><th class="n">Đơn lệch</th></tr></thead><tbody>' + g.map(function (x) { return '<tr data-drill="' + E(x.key) + '" data-by="code" data-flag="diff"><td><b>' + E(x.key) + '</b></td><td class="n">' + nf(x.giftQty) + '</td><td class="n">' + nf(x.sysQty) + '</td><td class="n">' + nf(x.giftQty - x.sysQty) + '</td><td class="n">' + nf(x.diffOrders) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
+    return h + '<div class="tw"><table class="kt"><thead><tr><th>Mã CTKM</th><th class="n">SL tính được</th><th class="n">SL hệ thống</th><th class="n">Chênh lệch</th><th class="n">Đơn lệch</th></tr></thead><tbody>' + g.map(function (x) { return '<tr data-drill="' + E(x.key) + '" data-by="code" data-flag="diff"><td><b>' + E(x.key) + '</b></td><td class="n">' + nf(x.giftQty) + '</td><td class="n">' + nf(x.sysQty) + '</td><td class="n">' + nf(x.giftQty - x.sysQty) + '</td><td class="n">' + nf(x.diffOrders) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
   }
   function history() {
     var hs = S.data.history || []; if (hs.length < 1) return "";
@@ -190,7 +190,7 @@
     if (c) {
       var s = c.R.summary, dp = dsPrev(c.R), old = S.data.run && S.data.run.month === c.month ? S.data.run : null;
       h += '<div class="kpis" style="margin-top:8px">' + kpi("Kết quả vừa tính — " + c.month, nf(s.amount) + " đ", "SL hàng KM", nf(s.giftQty), "Số đơn", nf(s.orders)) +
-        '<div class="k"><h3>Đối chiếu công thức</h3><div class="big">' + (s.diffOrders === 0 && s.giftQty === s.sysQty ? '<span class="pill s0">Khớp 100%</span>' : '<span class="pill s1">Lệch ' + nf(s.diffOrders) + " đơn</span>") + '</div><div class="row"><span>SL theo công thức</span><b>' + nf(s.sysQty) + '</b></div><div class="row"><span>Đơn thiếu giá</span><b>' + nf(s.missOrders) + "</b></div></div>" +
+        '<div class="k"><h3>Đối chiếu hệ thống</h3><div class="big">' + (s.diffOrders === 0 && s.giftQty === s.sysQty ? '<span class="pill s0">Khớp 100%</span>' : '<span class="pill s1">Lệch ' + nf(s.diffOrders) + " đơn</span>") + '</div><div class="row"><span>SL hệ thống</span><b>' + nf(s.sysQty) + '</b></div><div class="row"><span>Đơn thiếu giá</span><b>' + nf(s.missOrders) + "</b></div></div>" +
         kpi("Doanh số tổng — " + c.month, nf(dp.sales) + " đ", "SL bán", nf(dp.qty), "Nhóm hàng", nf(dp.ng)) +
         (old ? kpi("So với phiên bản " + old.ver + " đang dùng", (s.amount - old.amount >= 0 ? "+" : "") + nf(s.amount - old.amount) + " đ", "SL hàng KM", (s.giftQty - old.giftQty >= 0 ? "+" : "") + nf(s.giftQty - old.giftQty), "Đơn", (s.orders - old.orders >= 0 ? "+" : "") + nf(s.orders - old.orders)) : "") + "</div>";
       if (c.R.warnings.length) h += "<b>Cảnh báo (" + c.R.warnings.length + ")</b><ul>" + c.R.warnings.map(function (w) { return '<li class="' + w.level + '">' + E(w.msg) + "</li>"; }).join("") + "</ul>";
@@ -242,19 +242,19 @@
     get("km.orders", p).then(function (j) { if (!j.ok) throw new Error(j.error || "Lỗi"); if (S.f.mien) j.rows = j.rows.filter(function (r) { return r.mien === S.f.mien; }); DR = { rows: j.rows, total: j.total, truncated: j.truncated, title: by === "code" ? key + " · " + progName(key) : by === "day" ? "Ngày " + key : key, flag: flag, q: "" }; drawDrill(); })
       .catch(function (e) { dlg.innerHTML = '<div class="bar"><b>Chi tiết từng đơn</b><span class="sp"></span><button data-close>Đóng</button></div><div class="warn err">' + E(e.message) + "</div>"; });
   }
-  function flagPills(f) { var s = ""; if (/nopr/.test(f)) s += '<span class="pill s2">Thiếu giá</span> '; if (/pconf/.test(f)) s += '<span class="pill s1">Giá xung đột</span> '; if (/diff/.test(f)) s += '<span class="pill s1">Lệch công thức</span> '; if (/ret/.test(f)) s += '<span class="pill s0">Có trả hàng</span>'; return s; }
+  function flagPills(f) { var s = ""; if (/nopr/.test(f)) s += '<span class="pill s2">Thiếu giá</span> '; if (/pconf/.test(f)) s += '<span class="pill s1">Giá xung đột</span> '; if (/diff/.test(f)) s += '<span class="pill s1">Lệch hệ thống</span> '; if (/ret/.test(f)) s += '<span class="pill s0">Có trả hàng</span>'; return s; }
   function drawDrill() {
     var rows = DR.rows.filter(function (r) { return !DR.q || norm(r.order + " " + r.nppName + " " + r.khName + " " + r.kh + " " + r.npp).indexOf(norm(DR.q)) >= 0; }), t = rows.reduce(function (a, r) { a.q += r.giftQty; a.a += r.amount; a.s += r.suat; return a; }, { q: 0, a: 0, s: 0 });
     dlg.innerHTML = '<div class="bar"><b>' + E(DR.title) + '</b><span class="m">' + nf(rows.length) + " đơn · " + nf(t.s) + " suất · " + nf(t.q) + " SL hàng KM · " + nf(t.a) + ' đ</span><span class="sp"></span><input type="search" id="kdq" placeholder="Tìm số đơn, NPP, khách hàng…" value="' + E(DR.q) + '"><button id="kdx">⬇ Excel</button><button data-close>Đóng</button></div>' +
       (DR.truncated ? '<div class="warn">Chỉ hiển thị 3.000 đơn đầu trong tổng ' + nf(DR.total) + " đơn. Hãy lọc thêm theo vùng/NPP/ngày để xem hết.</div>" : "") +
-      '<div class="tw" style="max-height:60vh;overflow:auto"><table class="kt"><thead><tr><th>Số đơn hàng</th><th>CT</th><th>Ngày đặt</th><th>NPP</th><th>Vùng</th><th>Khách hàng</th><th class="n">SL mua đủ ĐK</th><th class="n">SL y/c</th><th class="n">Suất</th><th class="n">SL hàng KM</th><th class="n">Theo công thức</th><th class="n">Giá lẻ</th><th class="n">Giá trị (đ)</th><th>Ghi chú</th></tr></thead><tbody>' +
+      '<div class="tw" style="max-height:60vh;overflow:auto"><table class="kt"><thead><tr><th>Số đơn hàng</th><th>CT</th><th>Ngày đặt</th><th>NPP</th><th>Vùng</th><th>Khách hàng</th><th class="n">SL mua đủ ĐK</th><th class="n">SL y/c</th><th class="n">Suất</th><th class="n">SL hàng KM</th><th class="n">Hệ thống</th><th class="n">Giá lẻ</th><th class="n">Giá trị (đ)</th><th>Ghi chú</th></tr></thead><tbody>' +
       (rows.length ? rows.slice(0, 500).map(function (r) { return "<tr><td>" + E(r.order) + "</td><td>" + E(r.code) + "</td><td>" + E(r.date.slice(8) + "/" + r.date.slice(5, 7)) + '</td><td class="t">' + E(r.nppName || r.npp) + "</td><td>" + E(r.vung) + '</td><td class="t">' + E(r.khName) + '<div class="m" style="margin:0">' + E(r.kh) + '</div></td><td class="n">' + nf(r.elig) + '</td><td class="n">' + nf(r.req) + '</td><td class="n">' + nf(r.suat) + '</td><td class="n">' + nf(r.giftQty) + '</td><td class="n">' + nf(r.sysQty) + '</td><td class="n">' + (r.price ? nf(Math.round(r.price * 100) / 100) : "–") + '</td><td class="n">' + nf(r.amount) + "</td><td>" + flagPills(r.flag) + "</td></tr>"; }).join("") : '<tr><td colspan="14" class="empty">Không có đơn nào.</td></tr>') + "</tbody></table></div>" + (rows.length > 500 ? '<p class="m">Đang hiển thị 500 đơn đầu; dùng ô tìm kiếm hoặc xuất Excel để xem đầy đủ.</p>' : "");
     var i = q("#kdq", dlg); if (i && document.activeElement !== i && DR.q) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
   }
 
   /* ---------- Xuất Excel ---------- */
   function exportView() {
-    var T = KINDS[S.kind].t + " " + S.month, sheets = [], rows = group(rowsOf("npp", true), function (r) { return r.code; }), A = [["Mã CTKM", "Chương trình", "Cơ chế", "Số đơn", "Số suất", "SL hàng KM", "Giá trị (đ)", "SL theo công thức", "Chênh lệch"]];
+    var T = KINDS[S.kind].t + " " + S.month, sheets = [], rows = group(rowsOf("npp", true), function (r) { return r.code; }), A = [["Mã CTKM", "Chương trình", "Cơ chế", "Số đơn", "Số suất", "SL hàng KM", "Giá trị (đ)", "SL hệ thống", "Chênh lệch"]];
     var by = {}; rows.forEach(function (x) { by[x.key] = x; }); mechs().forEach(function (c) { var x = by[c.code] || ZERO(); A.push([c.code, c.name, rule(c), x.orders, x.suat, x.giftQty, x.amount, x.sysQty, x.giftQty - x.sysQty]); });
     sheets.push(["Theo chương trình", A]);
     var V = [["Vùng", "Miền", "Số đơn", "Số suất", "SL hàng KM", "Giá trị (đ)"]]; group(rowsOf("npp", true), function (r) { return r.vung; }, function (r) { return { mien: r.mien }; }).forEach(function (x) { V.push([x.key, x.mien, x.orders, x.suat, x.giftQty, x.amount]); }); sheets.push(["Theo vùng", V]);
@@ -265,7 +265,7 @@
     xl(sheets, T.replace(/\s+/g, "_"));
   }
   function exportDrill() {
-    var A = [["Số đơn hàng", "Mã CTKM", "Ngày đặt", "Mã NPP", "Tên NPP", "Vùng", "Miền", "Mã KH", "Tên KH", "SL mua đủ ĐK", "SL yêu cầu", "Số suất", "SL hàng KM", "SL theo công thức", "SKU tính giá", "Giá lẻ", "Giá trị (đ)", "Cờ"]];
+    var A = [["Số đơn hàng", "Mã CTKM", "Ngày đặt", "Mã NPP", "Tên NPP", "Vùng", "Miền", "Mã KH", "Tên KH", "SL mua đủ ĐK", "SL yêu cầu", "Số suất", "SL hàng KM", "SL hệ thống", "SKU tính giá", "Giá lẻ", "Giá trị (đ)", "Cờ"]];
     DR.rows.forEach(function (r) { A.push([r.order, r.code, r.date, r.npp, r.nppName, r.vung, r.mien, r.kh, r.khName, r.elig, r.req, r.suat, r.giftQty, r.sysQty, r.priceSku, r.price, r.amount, r.flag]); }); xl([["Chi tiết đơn", A]], "Chi_tiet_don_" + S.month);
   }
 
